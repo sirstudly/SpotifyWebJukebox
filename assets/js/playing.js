@@ -78,16 +78,42 @@ document.addEventListener('alpine:init', x => {
 
       const response = await spotifyApi.getMyCurrentPlaybackState();
       if (response) {
+        response.currentQueue = await spotifyApi.getMyCurrentQueue();
         this.handleChange(response);
       }
+      return response;
+    },
+
+    async nextTrack() {
+        return await spotifyApi.skipToNext();
+    },
+
+    async prevTrack() {
+      const state = await spotifyApi.getMyCurrentPlaybackState();
+      if (state && state.progress_ms > 5000) {
+        return await spotifyApi.seek(0);
+      }
+      return await spotifyApi.skipToPrevious();
+    },
+
+    async togglePlay() {
+      const state = await spotifyApi.getMyCurrentPlaybackState();
+      if (state && state.is_playing) {
+        return await spotifyApi.pause();
+      }
+      return await spotifyApi.play();
     },
 
     handleChange(obj) {
       this.lastPlaybackObj = this.playbackObj;
       this.playbackObj = obj;
 
+      if (this.playbackObj?.currentQueue?.queue) {
+        this.playbackObj.nextUp = this.playbackObj?.currentQueue?.queue[0]?.name + ' by ' + this.playbackObj?.currentQueue?.queue[0]?.artists?.map(artist => artist.name).join(', ');
+      }
+
       if (this.playbackObj.item?.name) {
-        document.title = `${this.playbackObj.item?.name} - ${this.playbackObj.item?.artists[0].name} - NowPlaying`;
+        document.title = `Playing ${this.playbackObj.item?.name} - ${this.playbackObj.item?.artists[0].name}`;
       }
 
       // Fetch album art

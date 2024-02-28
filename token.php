@@ -33,6 +33,10 @@ if (!isset($_GET['action'])) {
     setcookie('refreshToken', $refreshToken, time() + (3600 * 365));
 }
 
+error_log("accessToken: $accessToken");
+error_log("refreshToken: $refreshToken");
+error_log("refreshTime: $refreshTime");
+
 if (isset($_GET['response']) && $_GET['response'] == "data") {
     echo json_encode(array(
         'accessToken' => $accessToken,
@@ -41,12 +45,12 @@ if (isset($_GET['response']) && $_GET['response'] == "data") {
     ));
     die();
 } else {
-    if ($_SESSION['generateMiniPlayer'] == true) {
+    if (isset($_SESSION['generateMiniPlayer']) && $_SESSION['generateMiniPlayer'] == true) {
         header('Location: generate_miniplayer.php');
         die();
     }
 
-    header('Location: playing.php');
+    header('Location: login_success.php');
     die();
 }
 ?>

@@ -1,5 +1,5 @@
 <?php
-define('IndexTitle', 'Welcome to NowPlaying for Spotify!');
+define('IndexTitle', 'Generate access tokens for Spotify Jukebox!');
 define('IndexDescription', 'Please login with your Spotify account.');
 define('IndexConnection', 'Login to Spotify');
 define('GenerateMiniPlayer', 'Generate mini player');

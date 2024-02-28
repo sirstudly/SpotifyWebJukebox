@@ -1,27 +1,53 @@
-<img src="https://github.com/busybox11/NowPlaying-for-Spotify/blob/master/assets/images/favicon.png?" alt="Logo" width="100px" height="100px">
+<img src="https://github.com/busybox11/NowPlaying-for-Spotify/blob/master/assets/images/favicon.png?raw=true" alt="Logo" width="100px" height="100px">
 
-# NowPlaying for Spotify
+# Spotify Jukebox
 
-This is a real-time updating Spotify Connect visualizer, which has had its base codebase made in half a day.
+This is a real-time updating Spotify visualizer/controller.
+
+It has been modified from the [original project](https://github.com/busybox11/NowPlaying-for-Spotify)
+to allow playback on other devices (eg. if it's playing from a phone or the Spotify app on a different computer)
+as well as the ability to add songs to the current play queue.
+
+The intention of this project is so that it can be deployed at parties or large events/venues (eg. cafes, pubs, etc..).
+Publish the URL so that guests are able to queue additional songs from their phone (while playback occurs on a master
+device hooked up to some speakers).
+You may not want guests to skip tracks or toggle pause/play so that access is configurable but they'll be able to see
+what's currently playing (and what's currently queued).
+
+Also check out [my other project](https://github.com/sirstudly/SpotifyJukebox) which is essentially the same thing, 
+but implemented as a (Facebook) Messenger bot.
 
 This project is licensed under GNU GPL-3.0 license.
 
 ---
 
-Available at [nowplayi.ng](https://nowplayi.ng)
-
 ![Website screenshot](screenshots/regular.png)
+
+![Queue Song screenshot](screenshots/queue_song.png)
 
 ![Mini player generator screenshot](screenshots/miniplayer.png)
 *Mini player generator*
 
-[Status page](https://uptime.busybox.colabois.fr/status/nowplaying)
+###### tip to me: [paypal.me/ronchan44](https://paypal.me/ronchan44) (thank you!)
 
-###### Dedicated Discord server: [nowplayi.ng/discord](https://nowplayi.ng/discord)
-###### tip to me: [paypal.me/busybox11](https://paypal.me/busybox11) (thank you!)
-###### ko-fi: [ko-fi.com/busybox11](https://ko-fi.com/busybox11) (thank you!)
+## **Spotify Jukebox Changelog**
 
-## **Changelog**
+v1.0
+- Initial version forked from NowPlaying repo
+- Added queue song functionality to playing.php 
+- Added backend Spotify API support in spotify.php
+
+## **Upcoming changes**
+
+- [ ] Move player controls into backend API (spotify.php) so we don't need to publish the API key
+- [ ] Remove Spotify SDK javascript library entirely so we don't publish any key
+- [ ] Show more than one song in the "Up next" list
+- [ ] Is it possible to use WSS to monitor the DEVICE_STATE_CHANGE event from non-local players rather than poll every second?
+- [ ] Add ability to set playlist, set album, set artist radio, etc...
+- [ ] Set shuffle mode, repeat, etc.
+- [ ] How to handle token expiry? Server side tokens need to be refreshed (and saved)
+
+## **NowPlaying Changelog**
 
 v2.0.X
 
@@ -127,11 +153,13 @@ Edit those values:
 
 - `YOUR_CLIENT_ID` by your Client ID available on your app's panel,
 - `YOUR_CLIENT_SECRET` by your `Client Secret` available by clicking on the `Show Client Secret` button situated on the same webpage as your client ID,
-- `YOUR_DOMAIN` by your redirect URL, in the case of a local hosting replace it by `http://localhost/token.php` in most cases. Basicaly, it's the accessible URL for the `token.php` page.
+- `YOUR_DOMAIN` by your redirect URL, in the case of a local hosting replace it by `http://localhost/token.php` in most cases. Basicaly, it's the accessible URL for the `tokens.php` page. Note: You'll also need to add this redirect URL to your App in your [Spotify Dashboard](https://developer.spotify.com/dashboard).
 
 Let's go back on our app's panel. You need to declare the URL where the `token.php` page is located, for a local hosting it would be in most cases `http://localhost/token.php`. Click on the green `Edit settings` button situated on the top of the page, then in the `Redirect URIs` text field, indicate yours. ***ATTENTION***: what you typed should **IMPERATIVELY** be the same as what you wrote in the two precedent files! Then click on the `SAVE` button on the very bottom of the form. Your app is declared and ready to use!
 
 ## **Credits**
+This project is directly forked from [NowPlaying for Spotify by Busybox11](https://github.com/busybox11/NowPlaying-for-Spotify)
+
 Flags by [Freepik](https://www.freepik.com/) of the [www.flaticon.com](https://www.flaticon.com/) website under [Creative Commons BY 3.0](http://creativecommons.org/licenses/by/3.0/) license.
 
 ## **Featured similar projects / forks**
