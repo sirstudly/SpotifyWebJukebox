@@ -1,34 +1,26 @@
 <?php
 require 'vendor/autoload.php';
+require_once 'spotify_tokenizer.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->load();
 
+$tokenizer = new SpotifyTokenizer();
+$tokenizer->loadTokens();
+
 $session = new SpotifyWebAPI\Session(
-    $_ENV['CLIENT_ID'],
-    $_ENV['CLIENT_SECRET']
+    $tokenizer->getClientId()
 );
 
 // Fetch the saved access token from somewhere. A session for example.
-$session->setAccessToken($_ENV['ADMIN_ACCESS_TOKEN']);
-$session->setRefreshToken($_ENV['ADMIN_REFRESH_TOKEN']);
+$session->setAccessToken($tokenizer->getAccessToken());
+$session->setRefreshToken($tokenizer->getRefreshToken());
 
 $options = [
     'auto_refresh' => true,
 ];
 
 $api = new SpotifyWebAPI\SpotifyWebAPI($options, $session);
-
-// Remember to grab the tokens afterwards, they might have been updated
-$newAccessToken = $session->getAccessToken();
-$newRefreshToken = $session->getRefreshToken();
-
-if ($_ENV['ADMIN_ACCESS_TOKEN'] != $newAccessToken) {
-    error_log("NEW accessToken: $newAccessToken");
-}
-if ($_ENV['ADMIN_REFRESH_TOKEN'] != $newRefreshToken) {
-    error_log("NEW refreshToken: $newRefreshToken");
-}
 
 header("Content-Type: application/json");
 if (isset($_GET['c']) && $_GET['c'] == 'queue' && isset($_GET['uri']) && !empty($_GET['uri'])) {
@@ -87,6 +79,60 @@ elseif (isset($_GET['c']) && $_GET['c'] == 'getQueue') {
     }
     else {
         echo json_encode($results);
+    }
+}
+
+elseif (isset($_GET['c']) && $_GET['c'] == 'getMyCurrentPlaybackState') {
+    $results = $api->getMyCurrentPlaybackInfo();
+    if (empty($results)) {
+        echo json_encode(['message' => 'Nothing returned.', 'error' => true]);
+    }
+    else {
+        echo json_encode($results);
+    }
+}
+
+elseif (isset($_GET['c']) && $_GET['c'] == 'getMyCurrentQueue') {
+    $results = $api->getMyQueue();
+    if (empty($results)) {
+        echo json_encode(['message' => 'Nothing returned.', 'error' => true]);
+    }
+    else {
+        echo json_encode($results);
+    }
+}
+
+elseif (isset($_GET['c']) && $_GET['c'] == 'nextTrack') {
+    $results = $api->next();
+    if (empty($results)) {
+        echo json_encode(['message' => 'Operation SKIP failed.', 'error' => true]);
+    }
+    else {
+        echo json_encode(['message' => 'Track skipped.']);
+    }
+}
+
+elseif (isset($_GET['c']) && $_GET['c'] == 'prevTrack') {
+    $state = $api->getMyCurrentPlaybackInfo();
+    $results = $state->progress_ms > 5000 ? $api->seek(['position_ms' => 0]) : $api->previous();
+
+    if (empty($results)) {
+        echo json_encode(['message' => 'Operation SKIP BACK failed.', 'error' => true]);
+    }
+    else {
+        echo json_encode(['message' => 'Skipped back.']);
+    }
+}
+
+elseif (isset($_GET['c']) && $_GET['c'] == 'togglePlay') {
+    $state = $api->getMyCurrentPlaybackInfo();
+    $results = $state->is_playing ? $api->pause() : $api->play(false, ["some_option" => false]);
+
+    if (empty($results)) {
+        echo json_encode(['message' => 'Operation TOGGLE PLAY failed.', 'error' => true]);
+    }
+    else {
+        echo json_encode(['message' => 'Operation successful.']);
     }
 }
 

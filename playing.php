@@ -1,5 +1,9 @@
 <?php
 include_once('lang.php');
+require 'vendor/autoload.php';
+
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+$dotenv->load();
 
 if (session_status() != PHP_SESSION_ACTIVE) {
     session_start();
@@ -92,7 +96,7 @@ error_log("CURRENT SESSION: " . session_id());
     <script src="https://cdn.tailwindcss.com/3.3.0"></script>
 
     <script src="assets/js/scripts.js?ts=<?=time ()?>"></script>
-    <script src="assets/js/spotify-web-api.js"></script>
+    <script src="assets/js/spotify-web-api.js?ts=<?= time() ?>"></script>
     <script src="assets/js/playing.js?ts=<?=time ()?>"></script>
 
     <style>
@@ -437,14 +441,10 @@ error_log("CURRENT SESSION: " . session_id());
 
         // let player;
         Alpine.store('webPlayback', {
-            isAvailable: <?=isset($_SESSION["showPlaybackControls"]) && $_SESSION["showPlaybackControls"] == 'true'?>,
-            isConnected: false,
-            isPlaying: false,
+            isAvailable: <?=isset($_ENV['SHOW_PLAYBACK_CONTROLS']) && $_ENV['SHOW_PLAYBACK_CONTROLS'] == 'true' ? 'true' : 'false'?>,
 
             togglePlay() {
-                Alpine.store('player').togglePlay().then(result => {
-                    console.log("togglePlay: ", result);
-                });
+                Alpine.store('player').togglePlay();
             },
 
             nextTrack() {
@@ -456,67 +456,7 @@ error_log("CURRENT SESSION: " . session_id());
             },
 
             init() {
-                // player = new Spotify.Player({
-                //     name: window.deviceName,
-                //     getOAuthToken: cb => { cb(token); }
-                // });
-                //
-                // // Error handling
-                // player.addListener('initialization_error', ({ message }) => {
-                //     this.isAvailable = false;
-                //     console.error(message);
-                // });
-                // player.addListener('authentication_error', ({ message }) => {
-                //     this.isAvailable = false;
-                //     console.error(message);
-                // });
-                // player.addListener('account_error', ({ message }) => {
-                //     this.isAvailable = false;
-                //     console.error(message);
-                // });
-                // player.addListener('playback_error', ({ message }) => {
-                //     this.isAvailable = false;
-                //     console.error(message);
-                // });
-
-                // Playback status updates
-//                 player.addListener('player_state_changed', () => {
-//                     player.getCurrentState().then(state => {
-// console.log("PLAYBACK STATE CHANGED: ", state);
-//                         this.isConnected = (state !== null && (state.playback_id && state.playback_id !== ""));
-//                         this.isPlaying = state !== null ? state.paused === false : false;
-//                     });
-//                 });
-
-                // the following event only occurs if the player is local
-                // it won't ever fire if we're playing on a different device
-                // player.addListener('player_state_changed', ({
-                //                                                 position,
-                //                                                 duration,
-                //                                                 track_window: { current_track }
-                //                                             }) => {
-                //     console.log('Currently Playing', current_track);
-                //     console.log('Position in Song', position);
-                //     console.log('Duration of Song', duration);
-                // });
-                // player.on('player_state_changed', state => {
-                //     console.log("player_state_changed:", state);
-                // });
-                //
-                // // Ready
-                // player.addListener('ready', ({ device_id }) => {
-                //     this.isAvailable = true;
-                //     console.log('Ready with Device ID', device_id);
-                // });
-                //
-                // // Not Ready
-                // player.addListener('not_ready', ({ device_id }) => {
-                //     this.isAvailable = false;
-                //     console.log('Device ID has gone offline', device_id);
-                // });
-                //
-                // // Connect to the player
-                // player.connect();
+                // nothing to do here
             },
         });
     });

@@ -25,9 +25,6 @@ This project is licensed under GNU GPL-3.0 license.
 
 ![Queue Song screenshot](screenshots/queue_song.png)
 
-![Mini player generator screenshot](screenshots/miniplayer.png)
-*Mini player generator*
-
 ###### tip to me: [paypal.me/ronchan44](https://paypal.me/ronchan44) (thank you!)
 
 ## **Spotify Jukebox Changelog**
@@ -36,16 +33,17 @@ v1.0
 - Initial version forked from NowPlaying repo
 - Added queue song functionality to playing.php 
 - Added backend Spotify API support in spotify.php
+- Removed need for Spotify API key from front-end client
 
 ## **Upcoming changes**
 
-- [ ] Move player controls into backend API (spotify.php) so we don't need to publish the API key
+- [X] ~~Move player controls into backend API (spotify.php) so we don't need to publish the API key~~
 - [ ] Remove Spotify SDK javascript library entirely so we don't publish any key
 - [ ] Show more than one song in the "Up next" list
 - [ ] Is it possible to use WSS to monitor the DEVICE_STATE_CHANGE event from non-local players rather than poll every second?
 - [ ] Add ability to set playlist, set album, set artist radio, etc...
 - [ ] Set shuffle mode, repeat, etc.
-- [ ] How to handle token expiry? Server side tokens need to be refreshed (and saved)
+- [X] ~~How to handle token expiry? Server side tokens need to be refreshed (and saved)~~
 
 ## **NowPlaying Changelog**
 
@@ -154,8 +152,14 @@ Edit those values:
 - `YOUR_CLIENT_ID` by your Client ID available on your app's panel,
 - `YOUR_CLIENT_SECRET` by your `Client Secret` available by clicking on the `Show Client Secret` button situated on the same webpage as your client ID,
 - `YOUR_DOMAIN` by your redirect URL, in the case of a local hosting replace it by `http://localhost/token.php` in most cases. Basicaly, it's the accessible URL for the `tokens.php` page. Note: You'll also need to add this redirect URL to your App in your [Spotify Dashboard](https://developer.spotify.com/dashboard).
+- `TOKEN_FILE` by the name of the file to hold your Spotify access and refresh tokens
+- `SHOW_PLAYBACK_CONTROLS` set to `true` to show play/pause/skip track buttons overlay
 
 Let's go back on our app's panel. You need to declare the URL where the `token.php` page is located, for a local hosting it would be in most cases `http://localhost/token.php`. Click on the green `Edit settings` button situated on the top of the page, then in the `Redirect URIs` text field, indicate yours. ***ATTENTION***: what you typed should **IMPERATIVELY** be the same as what you wrote in the two precedent files! Then click on the `SAVE` button on the very bottom of the form. Your app is declared and ready to use!
+
+Now we'll need to generate the initial access/refresh tokens attached to your Spotify account. You only need to do this once.
+This is the file defined by `TOKEN_FILE` in your `.env` file. Go to `http://localhost/tokens.php` (or wherever you're deployed) in your web browser.
+Click on the appropriate Spotify button to be redirected to the Spotify consent page and click Agree. The `TOKEN_FILE` should now be updated with the access/refresh tokens required to access the Spotify API.
 
 ## **Credits**
 This project is directly forked from [NowPlaying for Spotify by Busybox11](https://github.com/busybox11/NowPlaying-for-Spotify)

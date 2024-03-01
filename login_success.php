@@ -1,9 +1,4 @@
 <?php
-if (!isset($_COOKIE['refreshToken']) || $_COOKIE['refreshTime'] < time()) {
-    header('Location: login.php?generateMiniPlayer=true');
-    die();
-}
-
 if(isset($_GET)){
     if(isset($_GET['lang']) && !empty($_GET['lang'])){
         setcookie('lang', $_GET['lang'], time() + 60*60*24*30);
@@ -56,7 +51,6 @@ if(isset($_GET['lang'])){
   <script>
     const refreshToken = '<?=$_COOKIE['refreshToken'];?>';
     const accessToken = '<?=$_COOKIE['accessToken'];?>';
-    const currentUrl = window.location.origin + window.location.pathname.slice(0, window.location.pathname.lastIndexOf('/'));
   </script>
 </head>
 
@@ -69,7 +63,6 @@ if(isset($_GET['lang'])){
 
       <div>
 		    <h1 class="text-3xl lg:text-4xl font-bold">Here are your generated tokens!</h1>
-            <h2 class="text-2xl lg:text-3xl font-bold">Paste them into your .env file.</h2>
 
         <div class="flex flex-row gap-2 mt-2">
             <?php include 'assets/links.php'; ?>

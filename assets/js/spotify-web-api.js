@@ -1439,7 +1439,8 @@ var SpotifyWebApi = (function() {
      */
     Constr.prototype.getMyCurrentPlaybackState = function(options, callback) {
         var requestData = {
-            url: _baseUri + '/me/player'
+            //url: _baseUri + '/me/player'
+            url: '/spotify.php?c=getMyCurrentPlaybackState'
         };
         return _checkParamsAndPerformRequest(requestData, options, callback);
     };
@@ -1536,6 +1537,26 @@ var SpotifyWebApi = (function() {
     };
 
     /**
+     * Play or pause playback on the user’s account.
+     *
+     * @param {Object} options A JSON object with options that can be passed.
+     * @param {function(Object,Object)} callback An optional callback that receives 2 parameters. The first
+     * one is the error object (null if no error), and the second is the value if the request succeeded.
+     * @return {Object} Null if a callback is provided, a `Promise` object otherwise
+     */
+    Constr.prototype.togglePlay = function(options, callback) {
+        options = options || {};
+        // var params = 'device_id' in options ? { device_id: options.device_id } : null;
+        var requestData = {
+            // type: 'PUT',
+            // url: _baseUri + '/me/player/pause',
+            // params: params
+            url: 'spotify.php?c=togglePlay'
+        };
+        return _checkParamsAndPerformRequest(requestData, options, callback);
+    };
+
+    /**
      * Skips to next track in the user’s queue.
      * See [Skip User’s Playback To Next Track](https://developer.spotify.com/web-api/skip-users-playback-to-next-track/) on
      * the Spotify Developer site for more information about the endpoint.
@@ -1547,11 +1568,12 @@ var SpotifyWebApi = (function() {
      */
     Constr.prototype.skipToNext = function(options, callback) {
         options = options || {};
-        var params = 'device_id' in options ? { device_id: options.device_id } : null;
+        // var params = 'device_id' in options ? { device_id: options.device_id } : null;
         var requestData = {
-            type: 'POST',
-            url: _baseUri + '/me/player/next',
-            params: params
+            // type: 'POST',
+            // url: _baseUri + '/me/player/next',
+            // params: params
+            url: 'spotify.php?c=nextTrack'
         };
         return _checkParamsAndPerformRequest(requestData, options, callback);
     };
@@ -1570,11 +1592,12 @@ var SpotifyWebApi = (function() {
      */
     Constr.prototype.skipToPrevious = function(options, callback) {
         options = options || {};
-        var params = 'device_id' in options ? { device_id: options.device_id } : null;
+        // var params = 'device_id' in options ? { device_id: options.device_id } : null;
         var requestData = {
-            type: 'POST',
-            url: _baseUri + '/me/player/previous',
-            params: params
+            // type: 'POST',
+            // url: _baseUri + '/me/player/previous',
+            // params: params
+            url: '/spotify.php?c=prevTrack'
         };
         return _checkParamsAndPerformRequest(requestData, options, callback);
     };
@@ -1697,7 +1720,8 @@ var SpotifyWebApi = (function() {
      */
     Constr.prototype.getMyCurrentQueue = function(options, callback) {
         var requestData = {
-            url: _baseUri + '/me/player/queue'
+            //url: _baseUri + '/me/player/queue'
+            url: '/spotify.php?c=getMyCurrentQueue'
         };
         return _checkParamsAndPerformRequest(requestData, options, callback);
     }
