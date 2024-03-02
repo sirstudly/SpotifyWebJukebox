@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en-GB" class="bg-[#000020] text-white">
+<head>
+    <title>Spotify Jukebox - Token Generator</title>
+    <link rel="icon" type="image/png" href="assets/images/favicon.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Spotify Jukebox is a smooth Spotify visualizer and song queuing platform." />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:image" content="/assets/images/favicon.png" />
+
+    <meta property="og:title" content="Spotify Jukebox" />
+    <meta property="og:type" content="website" />
+    <meta property="og:description" content="Spotify Jukebox is a smooth Spotify visualizer and song queuing platform." />
+    <meta property="og:image" content="/assets/images/favicon.png" />
+
+    <meta name="theme-color" content="#23a92a" />
+
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200..900&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com/"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Outfit', 'sans-serif']
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="flex flex-col h-screen px-4 py-auto gap-8 items-center justify-center text-center">
+<div class="flex flex-col items-center justify-center">
+    <img src="assets/images/favicon.png" alt="Logo" width="100px" height="100px" class="mb-4">
+
+    <h1 class="text-3xl lg:text-4xl font-bold text-pretty">We need permissions to use your Spotify account to link our Jukebox to!</h1>
+    <h2 class="text-xl lg:text-2xl font-light mb-2 text-pretty">Please login with your Spotify account.</h2>
+    <h3 class="text-lg lg:text-xl font-light mb-2 text-pretty">You can always revoke these permissions from your <a class="underline" href="https://www.spotify.com/uk/account/apps/">Spotify Accounts Page</a></h3>
+
+    <div class="flex flex-row gap-2 mt-2">
+        {{>links}}
+    </div>
+</div>
+
+<div class="flex flex-col gap-4">
+    <a href="/authenticate" class="bg-[#15883D] px-12 py-3 rounded-full text-lg tracking-wide active:scale-95 transition mx-auto">Spotify (View-only)</a>
+    <a href="login.php?allowPlaybackControl=true" class="bg-[#15883D] px-12 py-3 rounded-full text-lg tracking-wide active:scale-95 transition mx-auto">Spotify (Allow Playback Control)</a>
+</div>
+
+<h6 class="text-xs text-white/50 hover:text-white/80 transition text-pretty">By clicking on 'LOGIN TO SPOTIFY', you accept the use of cookies necessary for the proper functioning of the site.</h6>
+</body>
+</html>

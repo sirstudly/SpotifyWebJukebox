@@ -1,0 +1,22 @@
+diff --git a/node_modules/spotify-web-api-node/src/spotify-web-api.js b/node_modules/spotify-web-api-node/src/spotify-web-api.js
+index 2a756da..3274337
+--- a/node_modules/spotify-web-api-node/src/spotify-web-api.js
++++ b/node_modules/spotify-web-api-node/src/spotify-web-api.js
+@@ -184,6 +184,17 @@ SpotifyWebApi.prototype = {
+       .execute(HttpManager.get, callback);
+   },
+ 
++  /**
++   * Get current Queue
++   */
++
++  getQueue: function (callback){
++    return WebApiRequest.builder(this.getAccessToken())
++        .withPath('/v1/me/player/queue')
++        .build()
++        .execute(HttpManager.get,callback)
++  },
++
+   /**
+    * Look up an artist.
+    * @param {string} artistId The artist's ID.

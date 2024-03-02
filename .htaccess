@@ -2,8 +2,6 @@ ErrorDocument 404 /404.php
 ErrorDocument 403 /403.php
 
 RedirectMatch 403 /.env
-RedirectMatch 403 /.tokens.ini
-RedirectMatch 403 /update_env.sh
 
 # vendor
 RedirectMatch 403 /vendor(/|$)

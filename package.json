@@ -1,0 +1,26 @@
+{
+  "name": "spotify-web-jukebox",
+  "version": "1.0.0",
+  "description": "Spotify visualizer/controller webapp",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "patch-package"
+  },
+  "author": "https://github.com/sirstudly",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "concurrent-queue": "^7.0.2",
+    "express": "^4.18.3",
+    "hbs": "^4.2.0",
+    "spotify-web-api-node": "^5.0.2",
+    "superagent": "^8.1.2",
+    "websocket": "^1.0.34"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5",
+    "patch-package": "^8.0.0"
+  }
+}

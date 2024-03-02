@@ -1,4 +1,4 @@
 .env
 ._*
 .idea
-.tokens.ini
+node_modules
