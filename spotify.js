@@ -233,6 +233,13 @@ class Spotify {
         });
     }
 
+    async getTrackByURI(uri) {
+        return this.runTask(() => {
+            return this.api.getTrack(uri.substring(uri.lastIndexOf(":") + 1))
+                .then(track => track.body);
+        });
+    }
+
     async getTracks(trackIds) {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
@@ -614,18 +621,24 @@ class Spotify {
                 .filter(t => t.metadata && t.metadata.is_queued == 'true')
                 .map(t => t.uri));
             trackIds = trackIds.slice(0, 50) // API allows for max of 50
-                .map(uri => uri.substr(uri.lastIndexOf(":") + 1));
+                .map(uri => uri.substring(uri.lastIndexOf(":") + 1));
             const tracks = await this.getTracks(trackIds);
             const getTrackInfo = (track) => {
                 return {
                     id: track.id,
                     song_title: track.name,
-                    artist: track.artists.map(a => a.name).join(', ')
+                    artist: track.artists.map(a => a.name).join(', '),
+                    album: track.album
                 }
             };
             this.nowPlaying = {
-                last_updated: Date.now(),
+                last_updated: Date.now(), // FIXME: this is duplicated with timestamp, do we need both?
+                timestamp: parseInt(playerState.timestamp),
+                is_playing: !playerState.is_paused,
+                progress_ms: parseInt(playerState.position_as_of_timestamp),
+                duration_ms: parseInt(playerState.duration),
                 now_playing: getTrackInfo(tracks[0]),
+                next_track: playerState.next_tracks ? getTrackInfo(await this.getTrackByURI(playerState.next_tracks[0].uri)) : null,
                 queued_tracks: tracks.slice(1).map(t => getTrackInfo(t)),
                 context: await this._getCurrentContext(playerState.context_uri)
             };
@@ -649,13 +662,6 @@ class Spotify {
         if (!this.isWebAuthTokenValid()) {
             await this.refreshWebAuthToken();
         }
-
-        // first, check that our preferred device is active and playing something
-        // let devices = await this.getMyDevices();
-        // devices = devices.body.devices.filter(dev => dev.id == process.env.PREFERRED_DEVICE_ID);
-        // if (devices.length == 0) {
-        //     throw new ReferenceError("Current playback device not found.");
-        // }
 
         // now check if it's currently playing anything... start it if not
         const playback = await this.getPlaybackState();
@@ -683,10 +689,10 @@ class Spotify {
         const playback = playbackState != null ? playbackState : await this.getPlaybackState();
 
         // force repeat/shuffle
-        if (playback.body && !playback.body.actions.disallows.toggling_repeat_context && playback.body.repeat_state == "off") {
+        if (playback.body && !playback.body?.actions?.disallows?.toggling_repeat_context && playback.body.repeat_state == "off") {
             await this.setRepeat();
         }
-        if (playback.body && !playback.body.actions.disallows.toggling_shuffle && playback.body.shuffle_state == false) {
+        if (playback.body && !playback.body?.actions?.disallows?.toggling_shuffle && playback.body.shuffle_state == false) {
             await this.setShuffle();
         }
     }

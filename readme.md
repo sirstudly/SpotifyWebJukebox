@@ -29,7 +29,13 @@ This project is licensed under GNU GPL-3.0 license.
 
 ## **Spotify Jukebox Changelog**
 
-v1.0
+v1.1
+- Rewrite backend to NodeJS
+- Listen to WSS change notifications so we don't need to poll Spotify servers every second
+- Removed Spotify SDK from front-end client
+- Streamlined token retrieval on startup
+
+- v1.0
 - Initial version forked from NowPlaying repo
 - Added queue song functionality to playing.php 
 - Added backend Spotify API support in spotify.php
@@ -37,13 +43,10 @@ v1.0
 
 ## **Upcoming changes**
 
-- [X] ~~Move player controls into backend API (spotify.php) so we don't need to publish the API key~~
-- [ ] Remove Spotify SDK javascript library entirely so we don't publish any key
 - [ ] Show more than one song in the "Up next" list
-- [ ] Is it possible to use WSS to monitor the DEVICE_STATE_CHANGE event from non-local players rather than poll every second?
 - [ ] Add ability to set playlist, set album, set artist radio, etc...
 - [ ] Set shuffle mode, repeat, etc.
-- [X] ~~How to handle token expiry? Server side tokens need to be refreshed (and saved)~~
+- [ ] Setup WSS server and push out notifications rather than poll every second
 
 ## **NowPlaying Changelog**
 

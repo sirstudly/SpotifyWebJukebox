@@ -265,12 +265,12 @@
 
         <div class="flex flex-col lg:gap-1 xl:gap-2 w-full text-white">
             <h1
-                    x-text="$store.player.playbackObj.item?.name ?? translations.defaultTitleSong"
+                    x-text="$store.player.playbackObj.now_playing?.song_title ?? translations.defaultTitleSong"
                     id="song-title"
                     class="text-4xl lg:text-7xl font-bold text-pretty">
             </h1>
             <h2
-                    x-text="$store.player.playbackObj.item?.artists?.map(artist => artist.name).join(', ') ?? translations.defaultArtistSong"
+                    x-text="$store.player.playbackObj.now_playing?.artist ?? translations.defaultArtistSong"
                     id="song-artist"
                     class="text-2xl lg:text-5xl font-bold text-pretty">
             </h2>
@@ -289,8 +289,8 @@
                                 id="progress-time-now"
                         ></span>
                     <span
-                            x-show="$store.player.playbackObj?.item?.duration_ms"
-                            x-text="msToTime($store.player.playbackObj?.item?.duration_ms)"
+                            x-show="$store.player.playbackObj?.duration_ms"
+                            x-text="msToTime($store.player.playbackObj?.duration_ms)"
                             x-cloak
                             id="progress-time-total"
                     ></span>
@@ -304,20 +304,20 @@
                                 'transition-all duration-1000 ease-linear': Math.abs($store.player.playbackObj?.progress_ms - $store.player.lastPlaybackObj?.progress_ms) < 5000
                             }"
                             :style="{
-                                width: `${($store.player.playbackObj?.progress_ms / $store.player.playbackObj?.item?.duration_ms) * 100}%`
+                                width: `${($store.player.playbackObj?.progress_ms / $store.player.playbackObj?.duration_ms) * 100}%`
                             }"
                     ></div>
                 </div>
 
-                <div x-show="$store.player.playbackObj?.nextUp" class="flex flex-row gap-3 items-center" id="player-controls">
+                <div x-show="$store.player.playbackObj?.next_track" class="flex flex-row gap-3 items-center" id="player-controls">
                     <div>
                         <svg width="28" height="28" data-encore-id="icon" role="img" aria-hidden="true" viewBox="0 0 16 16" style="vector-effect: non-scaling-stroke; fill: currentcolor;"><path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 0 5h-9A2.5 2.5 0 0 1 1 3.5zm2.5-1a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2h-9z"></path></svg>
                     </div>
 
                     <span class="text-xl font-bold">
                             Next Up:
-                            <span x-text="$store.player.playbackObj?.nextUp"></span>
-                        </span>
+                            <span x-text="$store.player.playbackObj?.next_track?.song_title + ` by ` + $store.player.playbackObj?.next_track?.artist"></span>
+                    </span>
                 </div>
 
                 <div class="z-30 flex flex-row justify-end">
@@ -407,25 +407,17 @@
 </div>
 
 <script src="//unpkg.com/alpinejs" defer></script>
-<script src="https://sdk.scdn.co/spotify-player.js"></script>
 <script>
-    window.deviceName = 'CRH JamBot #' + localStorage.getItem('deviceId');
+    window.deviceName = 'JamBot #' + localStorage.getItem('deviceId');
 
-    const waitForSpotify = new Promise((resolve, reject) => {
-        window.onSpotifyWebPlaybackSDKReady = () => {
-            resolve();
-        };
-    });
     const waitForAlpine = new Promise((resolve, reject) => {
         document.addEventListener('alpine:init', () => {
             resolve();
         });
     });
 
-    Promise.all([waitForSpotify, waitForAlpine]).then(() => {
-        // const token = readCookie('accessToken');
+    Promise.all([waitForAlpine]).then(() => {
 
-        // let player;
         Alpine.store('webPlayback', {
             isAvailable: {{show_playback_controls}},
 

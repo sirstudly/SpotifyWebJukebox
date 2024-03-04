@@ -12,24 +12,16 @@ document.addEventListener('alpine:init', x => {
         targetImg: 'assets/images/no_song.png',
 
         async pollingLoop() {
-            setInterval(async () => {
-                await this.fetchState();
-            }, 5000)
+            setInterval(() => {
+                this.fetchState();
+            }, 1000)
         },
 
-        async fetchState() {
-            const response = await fetch("/get-playback-state")
-                .then((res) => res.json());
-            if (response && response.body) {
-                const queue = await fetch("/get-queue")
-                    .then((res) => res.json());
-                if (queue && queue.body) {
-                    response.body.currentQueue = queue.body;
-                }
-console.log("current state", response.body);
-                this.handleChange(response.body);
-            }
-            return response.body;
+        fetchState() {
+            return fetch("/now-playing")
+                .then(res => res.json())
+                .then(json => this.handleChange(json))
+                .catch(ex => console.error(ex));
         },
 
         async nextTrack() {
@@ -51,19 +43,25 @@ console.log("current state", response.body);
             this.lastPlaybackObj = this.playbackObj;
             this.playbackObj = obj;
 
-            if (this.playbackObj?.currentQueue?.queue) {
-                this.playbackObj.nextUp = this.playbackObj?.currentQueue?.queue[0]?.name + ' by ' + this.playbackObj?.currentQueue?.queue[0]?.artists?.map(artist => artist.name).join(', ');
+            if (this.playbackObj.now_playing) {
+                document.title = `Playing ${this.playbackObj.now_playing?.song_title} - ${this.playbackObj.now_playing?.artist}`;
             }
 
-            if (this.playbackObj.item?.name) {
-                document.title = `Playing ${this.playbackObj.item?.name} - ${this.playbackObj.item?.artists[0].name}`;
+            // recalculate progress_ms based on the timestamp and the current time
+            if (this.playbackObj.is_playing) {
+                this.playbackObj.progress_ms += Date.now() - this.playbackObj.timestamp;
+
+                // you can't overplay the track length
+                if (this.playbackObj.progress_ms > this.playbackObj.duration_ms) {
+                    this.playbackObj.progress_ms = this.playbackObj.duration_ms;
+                }
             }
 
             // Fetch album art
-            const imgsArr = this.playbackObj.item?.album?.images;
+            const imgsArr = this.playbackObj?.now_playing?.album?.images;
             const targetImg = (useSmallAlbumCover) ? imgsArr[imgsArr.length - 2]?.url : imgsArr[0]?.url;
 
-            const lastImgsArr = this.lastPlaybackObj.item?.album?.images;
+            const lastImgsArr = this.lastPlaybackObj?.now_playing?.album?.images;
             if (lastImgsArr === undefined) {
                 this.targetImg = targetImg;
                 return;
