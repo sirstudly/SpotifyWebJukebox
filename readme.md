@@ -154,20 +154,19 @@ Edit those values:
 
 - `YOUR_CLIENT_ID` by your Client ID available on your app's panel,
 - `YOUR_CLIENT_SECRET` by your `Client Secret` available by clicking on the `Show Client Secret` button situated on the same webpage as your client ID,
-- `YOUR_DOMAIN` by your redirect URL, in the case of a local hosting replace it by `http://localhost/token.php` in most cases. Basicaly, it's the accessible URL for the `tokens.php` page. Note: You'll also need to add this redirect URL to your App in your [Spotify Dashboard](https://developer.spotify.com/dashboard).
-- `TOKEN_FILE` by the name of the file to hold your Spotify access and refresh tokens
+- `REDIRECT_URI` by your redirect URL to handle the exchange of a Spotify access code to an access token. Note: You'll also need to add this redirect URL to your App in your [Spotify Dashboard](https://developer.spotify.com/dashboard).
+- `PREFERRED_DEVICE_ID` by your preferred Spotify device ID to resume playback to if nothing is playing. Some devices don't support this.
 - `SHOW_PLAYBACK_CONTROLS` set to `true` to show play/pause/skip track buttons overlay
 
 Let's go back on our app's panel. You need to declare the URL where the `token.php` page is located, for a local hosting it would be in most cases `http://localhost/token.php`. Click on the green `Edit settings` button situated on the top of the page, then in the `Redirect URIs` text field, indicate yours. ***ATTENTION***: what you typed should **IMPERATIVELY** be the same as what you wrote in the two precedent files! Then click on the `SAVE` button on the very bottom of the form. Your app is declared and ready to use!
 
-Now we'll need to generate the initial access/refresh tokens attached to your Spotify account. You only need to do this once.
-This is the file defined by `TOKEN_FILE` in your `.env` file. Go to `http://localhost/tokens.php` (or wherever you're deployed) in your web browser.
-Click on the appropriate Spotify button to be redirected to the Spotify consent page and click Agree. The `TOKEN_FILE` should now be updated with the access/refresh tokens required to access the Spotify API.
+Upon startup, we'll need to get the initial access/refresh tokens from Spotify. We'll also need a web-based token so we can register for change events.
+You'll be redirected first to the Spotify consent page where you'll be requested to login to your Spotify account.
+Once that is complete, there will be a following step to grab the session cookies for the web player. Instructions are on the page.
 
 ## **Credits**
 This project is directly forked from [NowPlaying for Spotify by Busybox11](https://github.com/busybox11/NowPlaying-for-Spotify)
-
-Flags by [Freepik](https://www.freepik.com/) of the [www.flaticon.com](https://www.flaticon.com/) website under [Creative Commons BY 3.0](http://creativecommons.org/licenses/by/3.0/) license.
+- [spotify-web-api-node by Michael Thelin](https://github.com/thelinmichael/spotify-web-api-node)
 
 ## **Featured similar projects / forks**
 - [NowPlaying Dashboard for Spotify by @peterdconradie](https://github.com/peterdconradie/Now-Playing-Dashboard-for-Spotify)

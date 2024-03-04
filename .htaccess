@@ -3,8 +3,8 @@ ErrorDocument 403 /403.php
 
 RedirectMatch 403 /.env
 
-# vendor
-RedirectMatch 403 /vendor(/|$)
+# node_modules
+RedirectMatch 403 /node_modules(/|$)
 
 # disable .git folder
 RedirectMatch 404 /\.git
