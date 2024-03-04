@@ -24,6 +24,9 @@ app.get("/", async (req, res) => {
     if (spotify.isAuthTokenValid() === false) {
         res.redirect("/tokens");
     }
+    else if (spotify.isWebAuthTokenValid() === false) {
+        res.redirect("/authenticate-web")
+    }
     else {
         let state = await spotify.getPlaybackState();
         if (state.body) {

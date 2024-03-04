@@ -25,6 +25,8 @@ This project is licensed under GNU GPL-3.0 license.
 
 ![Queue Song screenshot](screenshots/queue_song.png)
 
+[![Jukebox Demo](screenshots/demo.gif)](screenshots/demo.mp4)
+
 ###### tip to me: [paypal.me/ronchan44](https://paypal.me/ronchan44) (thank you!)
 
 ## **Spotify Jukebox Changelog**
