@@ -17,6 +17,7 @@
     "hbs": "^4.2.0",
     "spotify-web-api-node": "^5.0.2",
     "superagent": "^8.1.2",
+    "superagent-debugger": "^1.2.9",
     "websocket": "^1.0.34"
   },
   "devDependencies": {

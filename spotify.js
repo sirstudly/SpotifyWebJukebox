@@ -1,38 +1,12 @@
 const SpotifyWebApi = require("spotify-web-api-node");
 const W3CWebSocket = require('websocket').w3cwebsocket;
 const agent = require('superagent').agent();
-// const {Builder, By, Key, until} = require('selenium-webdriver');
-// const chrome = require("selenium-webdriver/chrome");
+// const superdebug = require('superagent-debugger');
 const fs = require("fs");
-// const cq = require('concurrent-queue');
 const dotenv = require("dotenv");
 dotenv.config();
-const DEFAULT_WAIT_MS = 30000;
 
 class Spotify {
-
-    constructor() {
-        // restrict singular access to webdriver
-        // attempt twice. on failure, reinitialize everything and attempt twice more...
-        // this.webqueue = cq().limit({concurrency: 1}).process(task =>
-        //     task().catch( e => {
-        //         this.consoleError("Attempt 2: ", e);
-        //         return task();
-        //     } ).catch( e => {
-        //         this.consoleError("Something wonky this way comes.. reinitializing... ", e);
-        //         return this.driver.quit()
-        //             .then(() => this.sleep(2000))
-        //             .then(() => this.initializeAuthToken()
-        //                 .then( () => {
-        //                     this.consoleInfo("Attempt 3");
-        //                     return task().catch( ex => {
-        //                         this.consoleError("Last Attempt: ", ex);
-        //                         return task();
-        //                     } )
-        //                 } ) )
-        //     } ) )
-        // ;
-    }
 
     // (re)attempt a task, a given number of times
     async runTask(task, limit = 5) {
@@ -50,30 +24,17 @@ class Spotify {
     }
 
     async initializeAuthToken() {
-        // Initialize ChromeDriver for Queuing Tracks
-        // const chromeOptions = new chrome.Options();
-        // for( const opt of process.env.CHROME_OPTIONS.split(' ') ) {
-        //     chromeOptions.addArguments(opt);
-        // }
-        // this.driver = await new Builder().forBrowser('chrome').setChromeOptions(chromeOptions).build();
-        // this.ngrokEndpoint = await this._getNgrokEndpoint();
-
         // Initialise connection to Spotify
         this.api = new SpotifyWebApi({
             clientId: process.env.SPOTIFY_CLIENT_ID,
             clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-            redirectUri: process.env.REDIRECT_URI //this.ngrokEndpoint + "/spotify"
+            redirectUri: process.env.REDIRECT_URI
         });
 
         // Generate a Url to authorize access to Spotify (requires login credentials)
         const scopes = ["user-modify-playback-state", "user-read-currently-playing", "user-read-playback-state", "streaming"];
         const authorizeUrl = this.api.createAuthorizeURL(scopes, "default-state");
         this.consoleInfo(`Authorization required. Going to ${authorizeUrl}`);
-
-        // await this.loginToSpotifyWeb(authorizeUrl)
-        //     .catch(e => this.consoleError("Error initializing Spotify web:", e));
-        // await this.refreshWebAuthToken();
-        // await this._initWebsocket();
     }
 
     getAuthorizeUrl() {
@@ -92,48 +53,59 @@ class Spotify {
     }
 
     /**
+     * Takes the cookies from the cURL command given. In Chrome dev tools (F12), under the Network tab,
+     * right click, Copy, Copy as cURL.
+     * @param curlCommand the copied cURL command
+     * @returns {Promise} cookie string or Exception if not found
+     */
+    stripCookiesFromCurl(curlCommand) {
+        const cookieLine = curlCommand.split("\n").filter(line => line.indexOf("cookie:") >= 0);
+        if (cookieLine.length == 0) {
+            return Promise.reject(new Error("Unable to find any cookies?"));
+        }
+        const firstIndex = cookieLine[0].indexOf("cookie:") + "cookie:".length + 1;
+        const lastIndex = cookieLine[0].lastIndexOf("'");
+        if (lastIndex < firstIndex) {
+            return Promise.reject(new Error("Unable to find the proper cookie header"));
+        }
+        return Promise.resolve(cookieLine[0].substring(firstIndex, lastIndex));
+    }
+
+    /**
+     * Calls #refreshWebAuthToken with the cookies extracted from the cURL command
+     * @param curlCommand
+     * @returns {Promise<void>}
+     */
+    async refreshWebAuthTokenFromCurl(curlCommand) {
+        return this.stripCookiesFromCurl(curlCommand)
+            .then(cookies => this.refreshWebAuthToken(cookies));
+    }
+
+    /**
      * Web token is used as bearer authorization for certain (unpublished) API requests.
      */
-    async refreshWebAuthToken() {
-        const cookies = await this.driver.manage().getCookies().then(ck => ck.map(c => c.name + "=" + c.value).join(";"));
+    async refreshWebAuthToken(cookies = null) {
+        if (cookies == null) {
+            cookies = this.web_auth.cookies;
+        }
         this.web_auth = await agent.get("https://open.spotify.com/get_access_token")
             .query({reason: "transport", productType: "web_player"})
             .set('Content-Type', 'application/json')
             .set('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/78.0.3904.97 Safari/537.36')
             .set('Cookie', cookies)
+            // .use(superdebug.default(console.info))
             .then(resp => {
+                // isAnonymous should be false (Spotify should be able to identify who's account it is)
+                if (resp.body.isAnonymous) {
+                    throw new Error("Unable to retrieve access token");
+                }
                 return {
                     access_token: resp.body.accessToken,
                     expires_at: resp.body.accessTokenExpirationTimestampMs
                 }
             });
-        this.consoleInfo("Web Access Token:", this.web_auth);
-    }
-
-    async loginToSpotifyWeb(authorizeUrl) {
-        await this.driver.get(authorizeUrl);
-
-        // intermittent ERR_CONNECTION_CLOSED issue
-        await this.driver.findElements(By.id("reload-button")).then(e => {
-            for (const elem of e) {
-                this.consoleInfo("Page timeout? Clicking on reload.");
-                elem.click().then(() => this.loginToSpotifyWeb(authorizeUrl));
-            }
-        });
-
-        await this.driver.findElements(By.id("auth-accept")).then(e => {
-            for (const elem of e) {
-                this.consoleInfo("Spotify Authorization. Clicking on Accept");
-                elem.click();
-            }
-        });
-
-        // authenticate if we have to authenticate
-        await this.driver.findElements(By.id("login-button")).then(e => {
-            if (e.length) {
-                this.doLogin()
-            }
-        });
+        this.web_auth.cookies = cookies;
+        this.consoleInfo("Web Access Token:", this.web_auth.access_token);
         return Promise.resolve('OK');
     }
 
@@ -158,7 +130,6 @@ class Spotify {
     }
 
     async initialized() {
-        await this.verifyLoggedIn(); // make sure browser is ready
         this.consoleInfo("Spotify is ready!");
         return Promise.resolve('OK');
     }
@@ -201,32 +172,6 @@ class Spotify {
             refresh_token: this.auth.refresh_token
         };
     }
-
-    // updateMessengerCallback() {
-    //     return this.webqueue(() => this._updateMessengerCallback());
-    // }
-    //
-    // async _updateMessengerCallback() {
-    //     await this.driver.get(`https://developers.facebook.com/apps/${process.env.MESSENGER_APP_ID}/messenger/settings/`);
-    //     await this.driver.wait(until.elementLocated(By.xpath("//div[div[div[text()='1. Configure webhooks']]]/following-sibling::div/div/div/span/div/div[2]/div/div")), DEFAULT_WAIT_MS).click();
-    //     await this.driver.wait(until.elementLocated(By.xpath("//div[text()='Edit']")), DEFAULT_WAIT_MS).click();
-    //     const endpoint = await this.driver.wait(until.elementLocated(By.xpath(
-    //         "//input[@placeholder='Validation requests and Webhook notifications for this object will be sent to this URL.']")), DEFAULT_WAIT_MS);
-    //     await this._clearWebElement(endpoint);
-    //     await endpoint.sendKeys(this.ngrokEndpoint + "/webhook");
-    //     await this.driver.findElement(By.xpath(
-    //         "//input[@placeholder='Token that Meta will echo back to you as part of callback URL verification.']"))
-    //         .sendKeys(process.env.MESSENGER_VERIFY_TOKEN);
-    //     await this.driver.wait(until.elementLocated(By.xpath("//div[contains(text(),'Verify and save')]")), DEFAULT_WAIT_MS).click();
-    // }
-
-    // async _getNgrokEndpoint() {
-    //     await this.driver.get("http://localhost:" + process.env.NGROK_PORT + "/status");
-    //     const ngrok_url = await this.driver.wait(until.elementLocated(By.xpath(
-    //         "//h4[text()='meta']/../div/table/tbody/tr[th[text()='URL']]/td")), DEFAULT_WAIT_MS).getText();
-    //     this.consoleInfo("ngrok URL:", ngrok_url);
-    //     return ngrok_url;
-    // }
 
     async searchTracks(terms, skip = 0, limit = 10) {
         if (!this.isAuthTokenValid()) {
@@ -437,7 +382,7 @@ class Spotify {
             await this.refreshAuthToken();
         }
         return await this.runTask(() => {
-            return this.api.play({device_id: process.env.SPOTIFY_PREFERRED_DEVICE_ID});
+            return this.api.play({device_id: process.env.PREFERRED_DEVICE_ID});
         });
     }
 
@@ -467,10 +412,10 @@ class Spotify {
             let response;
             // official API does not support station/radio
             if (uri.indexOf('station') < 0 && uri.indexOf('radio') < 0) {
-                response = await this.api.play({device_id: process.env.SPOTIFY_PREFERRED_DEVICE_ID, context_uri: uri});
+                response = await this.api.play({device_id: process.env.PREFERRED_DEVICE_ID, context_uri: uri});
             } else {
                 const webPlayerId = await this._getWebPlayerId();
-                response = await this._play(uri, webPlayerId, process.env.SPOTIFY_PREFERRED_DEVICE_ID);
+                response = await this._play(uri, webPlayerId, process.env.PREFERRED_DEVICE_ID);
             }
             this.consoleInfo("play response:", response);
             await this.forceRepeatShuffle();
@@ -483,7 +428,6 @@ class Spotify {
         const fn_filter_web_player = dev => dev.name == "Web Player (Chrome)";
         devices = devices.body.devices.filter(fn_filter_web_player);
         if (devices.length == 0) {
-            await this.verifyLoggedIn();
             devices = await this.getMyDevices();
             devices = devices.body.devices.filter(fn_filter_web_player);
             if (devices.length == 0) {
@@ -553,6 +497,7 @@ class Spotify {
         const webPlayerDeviceId = await this._getWebPlayerId();
         return agent.put("https://gew-spclient.spotify.com/connect-state/v1/devices/hobs_" + webPlayerDeviceId.substr(0, 35))
             .auth(this.web_auth.access_token, {type: 'bearer'})
+            // .use(superdebug.default(console.info))
             .set('Content-Type', 'application/json')
             .set('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/78.0.3904.97 Safari/537.36')
             .set('X-Spotify-Connection-Id', this.spotifyConnectionId)
@@ -568,32 +513,17 @@ class Spotify {
             });
     }
 
-    /**
-     * Register for updates on the Spotify websocket service.
-     * @private
-     */
-    // async _registerForNotifications() {
-    //     if (!this.isWebAuthTokenValid()) {
-    //         await this.refreshWebAuthToken();
-    //     }
-    //     if (!this.spotifyConnectionId || !this.web_auth) {
-    //         throw new ReferenceError("Spotify connection not initialized.");
-    //     }
-    //     return agent.put("https://api.spotify.com/v1/me/notifications/user")
-    //         .auth(this.web_auth.access_token, {type: 'bearer'})
-    //         .set('Content-Type', 'application/json')
-    //         .set('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/78.0.3904.97 Safari/537.36')
-    //         .buffer(true) // because content-type isn't set in the response header, we need to get the raw text rather than the (parsed) body
-    //         .query({connection_id: this.spotifyConnectionId})
-    //         .then(resp => JSON.parse(resp.text))
-    //         .catch(err => {
-    //             this.consoleError("Failed to register for notifications.", err);
-    //             if (err.status === 401) { // Unauthorized
-    //                 this.refreshWebAuthToken();
-    //             }
-    //             throw err;
-    //         });
-    // }
+    async resetWebsocket() {
+        if (this.ws) {
+            clearInterval(this.ws.interval);
+            this.ws.onclose = () => {};
+            this.ws.close();
+            this.ws.isAlive = false;
+            this.ws = null;
+            this.consoleInfo("Resetting websocket...");
+        }
+        return Promise.resolve("OK");
+    }
 
     async _initWebsocket() {
         this.consoleInfo("WS: Initializing websocket to Spotify.");
@@ -642,27 +572,25 @@ class Spotify {
             }
             else {
                 this.consoleInfo("WS message:", payload)
-                if(payload.headers['Spotify-Connection-Id']) {
+                if (payload.headers['Spotify-Connection-Id']) {
                     try {
                         this.spotifyConnectionId = payload.headers['Spotify-Connection-Id'];
                         this.consoleInfo("WS initialized spotify-connection-id: " + this.spotifyConnectionId);
 
-                        // let resp = await this._registerForNotifications();
-                        // this.consoleInfo("WS notification registration response: ", resp);
                         // this should now trigger events
                         let resp = await this._getConnectState();
                         this.consoleInfo("WS connection state response: ", resp);
                         await this._updateNowPlaying(resp.player_state);
-
-                    } catch (ex) {
+                    }
+                    catch (ex) {
                         this.consoleError("Failed to register new connection id:", ex);
                         this.ws.isAlive = false; // try again by forcing connection reset
                     }
                 }
                 else {
                     // update what's currently playing based on the CHANGE event
-                    if(payload.payloads) {
-                        const activeDevices = payload.payloads.filter(p => p.devices_that_changed && p.devices_that_changed.includes(process.env.SPOTIFY_PREFERRED_DEVICE_ID));
+                    if (payload.payloads) {
+                        const activeDevices = payload.payloads.filter(p => p.devices_that_changed && p.devices_that_changed.includes(process.env.PREFERRED_DEVICE_ID));
                         if (activeDevices.length) {
                             await this._updateNowPlaying(activeDevices[0].cluster.player_state);
                         }
@@ -714,20 +642,17 @@ class Spotify {
      * @private
      */
     async _verifyPlaybackState() {
+
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
-            await this.verifyLoggedIn(); // make sure browser is ready
         }
-        // else {
-        //     const loginButtons = await this.driver.findElements(By.xpath("//button[normalize-space()='Log in']"));
-        //     if (loginButtons.length) {
-        //         await this.verifyLoggedIn(); // make sure browser is ready
-        //     }
-        // }
+        if (!this.isWebAuthTokenValid()) {
+            await this.refreshWebAuthToken();
+        }
 
         // first, check that our preferred device is active and playing something
         // let devices = await this.getMyDevices();
-        // devices = devices.body.devices.filter(dev => dev.id == process.env.SPOTIFY_PREFERRED_DEVICE_ID);
+        // devices = devices.body.devices.filter(dev => dev.id == process.env.PREFERRED_DEVICE_ID);
         // if (devices.length == 0) {
         //     throw new ReferenceError("Current playback device not found.");
         // }
@@ -738,12 +663,12 @@ class Spotify {
             // do we have anything to play
             if (!playback.body || (playback.body.context == null && playback.body.item == null)) {
                 await this.api.play({
-                    device_id: process.env.SPOTIFY_PREFERRED_DEVICE_ID,
+                    device_id: process.env.PREFERRED_DEVICE_ID,
                     context_uri: this.nowPlaying && this.nowPlaying.context && this.nowPlaying.context.uri ?
                         this.nowPlaying.context.uri : process.env.SPOTIFY_FALLBACK_PLAYLIST_URI
                 });
             } else { // resume previous context
-                await this.api.play({device_id: process.env.SPOTIFY_PREFERRED_DEVICE_ID});
+                await this.api.play({device_id: process.env.PREFERRED_DEVICE_ID});
             }
         }
         await this.forceRepeatShuffle(playback);
@@ -784,21 +709,6 @@ class Spotify {
         const item = await fnRetrieveitem();
         this.consoleInfo(`Attempting to set ${item.body.name} ${item.body.type} radio.`);
         return await this.play(`spotify:radio:${item.body.type}:${item.body.id}`);
-    }
-
-    // uses the selenium web client to perform action
-    async _setContextRadio__DEPRECATED(fnRetrieveitem) {
-        await this._verifyPlaybackState();
-
-        const item = await fnRetrieveitem();
-        this.consoleInfo(`Attempting to set ${item.body.name} radio.`);
-        await this.driver.get(item.body.external_urls.spotify);
-
-        // right-click on ... and click on "Start Radio"
-        const ellipsis = await this.driver.wait(until.elementLocated(By.xpath("//button[@title='More']/div")), DEFAULT_WAIT_MS);
-        await this.driver.actions({bridge: true}).contextClick(ellipsis).perform();
-        const startRadioButton = await this.driver.wait(until.elementLocated(By.xpath("//nav[contains(@class, 'react-contextmenu--visible')]/div[normalize-space()='Start Radio']")), DEFAULT_WAIT_MS);
-        await this.driver.actions({bridge: true}).move({duration:500, origin: startRadioButton}).press().pause(200).release().perform();
     }
 
     /**
@@ -846,86 +756,6 @@ class Spotify {
         }
         this.consoleError("Unable to determine context from URI: " + contextUri)
         return Promise.resolve(null);
-    }
-
-    async verifyLoggedIn() {
-        // await this.driver.get("https://open.spotify.com/browse/featured#_=_");
-        // const loginButtons = await this.driver.findElements(By.xpath("//button[normalize-space()='Log in']"));
-        // if( loginButtons.length ) {
-        //     await loginButtons[0].click();
-        //     await this.driver.wait(until.stalenessOf(loginButtons[0]), DEFAULT_WAIT_MS);
-        //     await this.doLogin();
-        // }
-        // else {
-        //     this.consoleInfo("CHROME: No login button. Already logged in?");
-        //     const userLink = "//figure[@data-testid='user-widget-avatar']";
-        //     const elem = await this.driver.wait(until.elementLocated(By.xpath(userLink)), DEFAULT_WAIT_MS);
-        //     const accountName = await elem.getAttribute('title');
-        //     this.consoleInfo("CHROME: Logged in as " + accountName);
-        // }
-        if (this.isAuthTokenValid() === false) {
-            this.consoleInfo("Access token needs to be initialised. Go to /tokens to do this.");
-        }
-        this.consoleInfo("TODO: VERIFY LOGGED IN?");
-    }
-
-    async doLogin() {
-        if (process.env.SPOTIFY_USERNAME) {
-            const usernameField = await this.driver.findElement(By.id("login-username"));
-            await this._clearWebElement(usernameField);
-            await usernameField.sendKeys(process.env.SPOTIFY_USERNAME);
-            await this.driver.findElement(By.id("login-password")).sendKeys(process.env.SPOTIFY_PASSWORD);
-            const loginButton = await this.driver.findElement(By.id("login-button"));
-            await loginButton.click();
-            await this.driver.wait(until.stalenessOf(loginButton), DEFAULT_WAIT_MS);
-        } else {
-            const FB_LOGIN_BTN_PATH = By.xpath("//a[normalize-space()='Log in with Facebook']");
-            const loginViaFacebook = await this.driver.wait(until.elementLocated(FB_LOGIN_BTN_PATH), DEFAULT_WAIT_MS);
-            await loginViaFacebook.click();
-            await this.driver.wait(until.stalenessOf(loginViaFacebook), DEFAULT_WAIT_MS);
-            const loginBtns = await this.driver.findElements(By.id("loginbutton"));
-            if (loginBtns.length) { // FB credentials may be cached
-                this.consoleInfo("Logging in via Facebook");
-                await this.driver.findElement(By.id("email")).sendKeys(process.env.FB_EMAIL);
-                await this.driver.findElement(By.id("pass")).sendKeys(process.env.FB_PASSWORD);
-                await loginBtns[0].click();
-                await this.driver.wait(until.stalenessOf(loginBtns[0]), DEFAULT_WAIT_MS);
-            }
-            const authButtons = await this.driver.findElements(By.id("auth-accept"));
-            if (authButtons.length) {
-                this.consoleInfo("Accepting consent for updating Spotify");
-                await authButtons[0].click();
-                await this.driver.wait(until.stalenessOf(authButtons[0]), DEFAULT_WAIT_MS);
-            }
-        }
-    }
-
-    async takeScreenshot(url, filename) {
-        await this.driver.get(url)
-            .then( () => {
-                this.saveScreenshot(filename);
-            });
-    }
-
-    async savePageSource(filename) {
-        const currentUrl = await this.driver.getCurrentUrl();
-        this.consoleInfo( `Writing source to ${filename} for ${currentUrl}` );
-        await this.driver.getPageSource().then(src => {
-            fs.writeFileSync(filename, src, function (err) { throw err; });
-        });
-    }
-
-    async saveScreenshot(filename) {
-        await this.driver.takeScreenshot().then(
-            function (image, err) {
-                fs.writeFileSync(filename, image, 'base64', function (err) { throw err; });
-            }
-        );
-    }
-
-    async _clearWebElement(elem) {
-        await this.driver.executeScript(elt => elt.select(), elem);
-        await elem.sendKeys(Key.BACK_SPACE);
     }
 
     sleep(ms) {
