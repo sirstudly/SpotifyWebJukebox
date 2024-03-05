@@ -491,7 +491,7 @@ class Spotify {
     }
 
     getStatus() {
-        return this.nowPlaying;
+        return this.nowPlaying || {};
     }
 
     async _getConnectState() {
@@ -597,10 +597,8 @@ class Spotify {
                 else {
                     // update what's currently playing based on the CHANGE event
                     if (payload.payloads) {
-                        const activeDevices = payload.payloads.filter(p => p.devices_that_changed && p.devices_that_changed.includes(process.env.PREFERRED_DEVICE_ID));
-                        if (activeDevices.length) {
-                            await this._updateNowPlaying(activeDevices[0].cluster.player_state);
-                        }
+                        payload.payloads.filter(p => p.update_reason === "DEVICE_STATE_CHANGED")
+                            .forEach(p => this._updateNowPlaying(p.cluster.player_state))
                     }
                 }
             }
