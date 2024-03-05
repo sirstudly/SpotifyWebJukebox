@@ -21,7 +21,7 @@ document.addEventListener('alpine:init', x => {
             return fetch("/now-playing")
                 .then(res => res.json())
                 .then(json => this.handleChange(json))
-                .catch(ex => console.error(ex));
+                .catch(ex => console.log(ex));
         },
 
         async nextTrack() {
