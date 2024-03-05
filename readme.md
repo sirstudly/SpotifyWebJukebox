@@ -37,7 +37,7 @@ v1.1
 - Removed Spotify SDK from front-end client
 - Streamlined token retrieval on startup
 
-- v1.0
+v1.0
 - Initial version forked from NowPlaying repo
 - Added queue song functionality to playing.php 
 - Added backend Spotify API support in spotify.php
@@ -46,6 +46,7 @@ v1.1
 ## **Upcoming changes**
 
 - [ ] Show more than one song in the "Up next" list
+- [ ] Show more than 20 tracks when searching 
 - [ ] Add ability to set playlist, set album, set artist radio, etc...
 - [ ] Set shuffle mode, repeat, etc.
 - [ ] Setup WSS server and push out notifications rather than poll every second
