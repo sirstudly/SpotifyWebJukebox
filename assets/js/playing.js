@@ -59,6 +59,9 @@ document.addEventListener('alpine:init', x => {
 
             // Fetch album art
             const imgsArr = this.playbackObj?.now_playing?.album?.images;
+            if (imgsArr === undefined) {
+                return;
+            }
             const targetImg = (useSmallAlbumCover) ? imgsArr[imgsArr.length - 2]?.url : imgsArr[0]?.url;
 
             const lastImgsArr = this.lastPlaybackObj?.now_playing?.album?.images;

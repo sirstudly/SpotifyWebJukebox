@@ -2,8 +2,9 @@ const SpotifyWebApi = require("spotify-web-api-node");
 const W3CWebSocket = require('websocket').w3cwebsocket;
 const agent = require('superagent').agent();
 // const superdebug = require('superagent-debugger');
-const fs = require("fs");
 const dotenv = require("dotenv");
+const crypto = require("crypto");
+const USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/78.0.3904.97 Safari/537.36';
 dotenv.config();
 
 class Spotify {
@@ -13,7 +14,8 @@ class Spotify {
         return task().catch(async(e) => {
             this.consoleError(`Attempt failed, ${limit} tries remaining.`, e);
             if (e.message == "Unauthorized") {
-                await this.initializeAuthToken();
+                this.consoleInfo("Unauthorized? Refreshing auth token...");
+                await this.refreshAuthToken();
             }
             if (limit <= 0) {
                 this.consoleError("Too many attempts. Giving up.");
@@ -21,20 +23,6 @@ class Spotify {
             }
             return this.runTask(task, limit - 1);
         })
-    }
-
-    async initializeAuthToken() {
-        // Initialise connection to Spotify
-        this.api = new SpotifyWebApi({
-            clientId: process.env.SPOTIFY_CLIENT_ID,
-            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-            redirectUri: process.env.REDIRECT_URI
-        });
-
-        // Generate a Url to authorize access to Spotify (requires login credentials)
-        const scopes = ["user-modify-playback-state", "user-read-currently-playing", "user-read-playback-state", "streaming"];
-        const authorizeUrl = this.api.createAuthorizeURL(scopes, "default-state");
-        this.consoleInfo(`Authorization required. Going to ${authorizeUrl}`);
     }
 
     getAuthorizeUrl() {
@@ -91,7 +79,7 @@ class Spotify {
         this.web_auth = await agent.get("https://open.spotify.com/get_access_token")
             .query({reason: "transport", productType: "web_player"})
             .set('Content-Type', 'application/json')
-            .set('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/78.0.3904.97 Safari/537.36')
+            .set('User-Agent', USER_AGENT)
             .set('Cookie', cookies)
             // .use(superdebug.default(console.info))
             .then(resp => {
@@ -135,15 +123,19 @@ class Spotify {
     }
 
     async refreshAuthToken() {
-        const result = await this.api.refreshAccessToken();
+        if (this.api === undefined) {
+            return Promise.reject("Spotify not yet initialized...");
+        }
+        return this.api.refreshAccessToken()
+            .then(result => {
+                const expiresAt = new Date();
+                expiresAt.setSeconds(expiresAt.getSeconds() + result.body.expires_in);
+                this.auth.access_token = result.body.access_token;
+                this.auth.expires_at = expiresAt;
 
-        const expiresAt = new Date();
-        expiresAt.setSeconds(expiresAt.getSeconds() + result.body.expires_in);
-        this.auth.access_token = result.body.access_token;
-        this.auth.expires_at = expiresAt;
-
-        this.api.setAccessToken(result.body.access_token);
-        this.consoleInfo("Access Token:", result.body.access_token);
+                this.api.setAccessToken(result.body.access_token);
+                this.consoleInfo("Access Token:", result.body.access_token);
+            })
     }
 
     /**
@@ -459,7 +451,7 @@ class Spotify {
         return agent.post(`https://gew-spclient.spotify.com/connect-state/v1/player/command/from/${fromDeviceId}/to/${toDeviceId}`)
             .auth(this.web_auth.access_token, {type: 'bearer'})
             .set('Content-Type', 'application/json') // text/plain;charset=UTF-8 (in chrome web player)
-            .set('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/78.0.3904.97 Safari/537.36')
+            .set('User-Agent', USER_AGENT)
             .buffer(true)
             .send({
                 "command": {
@@ -494,28 +486,86 @@ class Spotify {
         return this.nowPlaying || {};
     }
 
-    async _getConnectState() {
+    /**
+     * Registers a fake device so we can listen for events and push our state onto the currently playing device.
+     * The random device id will be stored in this.fakeDeviceId.
+     * @returns {Promise<*>}
+     */
+    async registerFakeDevice() {
         if (!this.isWebAuthTokenValid()) {
             await this.refreshWebAuthToken();
         }
-        if (!this.spotifyConnectionId) {
-            throw new ReferenceError("Spotify connection not initialized.");
-        }
-        const webPlayerDeviceId = await this._getWebPlayerId();
-        return agent.put("https://gew-spclient.spotify.com/connect-state/v1/devices/hobs_" + webPlayerDeviceId.substr(0, 35))
+        this.fakeDeviceId = crypto.randomBytes(20).toString("hex");
+        this.consoleInfo("Registering fake device id " + this.fakeDeviceId);
+        return agent.post(`https://gew-spclient.spotify.com/track-playback/v1/devices`)
             .auth(this.web_auth.access_token, {type: 'bearer'})
-            // .use(superdebug.default(console.info))
             .set('Content-Type', 'application/json')
-            .set('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/78.0.3904.97 Safari/537.36')
+            .set('User-Agent', USER_AGENT)
+            .buffer(true)
+            .send({
+                "device": {
+                    "brand": "spotify",
+                    "capabilities": {
+                        "change_volume": true,
+                        "enable_play_token": true,
+                        "supports_file_media_type": true,
+                        "play_token_lost_behavior": "pause",
+                        "disable_connect": true,
+                        "audio_podcasts": true,
+                        "video_playback": true,
+                        "manifest_formats": [
+                            "file_urls_mp3",
+                            "manifest_ids_video",
+                            "file_urls_external",
+                            "file_ids_mp4",
+                            "file_ids_mp4_dual"
+                        ]
+                    },
+                    "device_id": this.fakeDeviceId,
+                    "device_type": "computer",
+                    "metadata": {},
+                    "model": "web_player",
+                    "name": "Fake Jambot Player",
+                    "platform_identifier": "web_player windows 10;chrome 87.0.4280.66;desktop"
+                },
+                "connection_id": this.spotifyConnectionId,
+                "client_version": "harmony:4.11.0-af0ef98",
+                "volume": 65535
+            })
+            .then(resp => {
+                this.consoleInfo("Device registration response", resp);
+                return JSON.parse(resp.text);
+            })
+            .catch(err => {
+                this.consoleError("Failed to register fake device.", err);
+                throw err;
+            });
+    }
+
+    /**
+     * Ask spotify to message our fake device whenever there is a state change.
+     * @returns {Promise<*>}
+     */
+    async registerDeviceForNotifications() {
+        if (!this.isWebAuthTokenValid()) {
+            await this.refreshWebAuthToken();
+        }
+        return agent.put(`https://gew-spclient.spotify.com/connect-state/v1/devices/hobs_${this.fakeDeviceId}`)
+            .auth(this.web_auth.access_token, {type: 'bearer'})
+            .set('Content-Type', 'application/json')
+            .set('User-Agent', USER_AGENT)
             .set('X-Spotify-Connection-Id', this.spotifyConnectionId)
             .buffer(true) // because content-type isn't set in the response header, we need to get the raw text rather than the (parsed) body
             .send({
                 member_type: "CONNECT_STATE",
                 device: {device_info: {capabilities: {can_be_player: false, hidden: true}}}
             })
-            .then(resp => JSON.parse(resp.text))
+            .then(resp => {
+                this.consoleInfo("Notification registration response", resp);
+                return JSON.parse(resp.text);
+            })
             .catch(err => {
-                this.consoleError("Failed to retrieve connection state.", err);
+                this.consoleError("Failed to register for notifications.", err);
                 throw err;
             });
     }
@@ -580,19 +630,17 @@ class Spotify {
             else {
                 this.consoleInfo("WS message:", payload)
                 if (payload.headers['Spotify-Connection-Id']) {
-                    try {
-                        this.spotifyConnectionId = payload.headers['Spotify-Connection-Id'];
-                        this.consoleInfo("WS initialized spotify-connection-id: " + this.spotifyConnectionId);
+                    this.spotifyConnectionId = payload.headers['Spotify-Connection-Id'];
+                    this.consoleInfo("WS initialized spotify-connection-id: " + this.spotifyConnectionId);
 
-                        // this should now trigger events
-                        let resp = await this._getConnectState();
-                        this.consoleInfo("WS connection state response: ", resp);
-                        await this._updateNowPlaying(resp.player_state);
-                    }
-                    catch (ex) {
-                        this.consoleError("Failed to register new connection id:", ex);
-                        this.ws.isAlive = false; // try again by forcing connection reset
-                    }
+                    // this should now trigger events
+                    await this.registerFakeDevice()
+                        .then(() => this.registerDeviceForNotifications())
+                        .then(resp => this._updateNowPlaying(resp.player_state))
+                        .catch(err => {
+                            this.consoleError("Failed to register for notifications", err);
+                            this.ws.isAlive = false; // try again by forcing connection reset
+                        });
                 }
                 else {
                     // update what's currently playing based on the CHANGE event

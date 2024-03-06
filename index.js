@@ -24,18 +24,28 @@ app.listen(port, () => {
 
 app.get("/", async (req, res) => {
     if (spotify.isAuthTokenValid() === false) {
-        res.redirect("/tokens");
+        spotify.refreshAuthToken()
+            .catch(err => {
+                spotify.consoleError("Failed to refresh auth token.", err);
+                res.redirect("/tokens");
+            });
     }
     else if (spotify.isWebAuthTokenValid() === false) {
-        res.redirect("/authenticate-web")
+        spotify.refreshWebAuthToken()
+            .catch(err => {
+                spotify.consoleError("Failed to refresh web auth token.", err);
+                res.redirect("/authenticate-web")
+            });
     }
     else {
-        let state = await spotify.getPlaybackState();
-        if (state.body) {
-            state = state.body;
-        }
-        state.show_playback_controls = process.env.SHOW_PLAYBACK_CONTROLS === "true";
-        res.render("playing", state);
+        spotify.getPlaybackState()
+            .then(state => {
+                if (state.body) {
+                    state = state.body;
+                }
+                state.show_playback_controls = process.env.SHOW_PLAYBACK_CONTROLS === "true";
+                res.render("playing", state);
+            })
     }
 });
 
