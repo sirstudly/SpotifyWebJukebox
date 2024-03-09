@@ -646,7 +646,9 @@ class Spotify {
                     // update what's currently playing based on the CHANGE event
                     if (payload.payloads) {
                         payload.payloads.filter(p => p.update_reason === "DEVICE_STATE_CHANGED")
-                            .forEach(p => this._updateNowPlaying(p.cluster.player_state))
+                            .forEach(p => this._updateNowPlaying(p.cluster.player_state).catch(e => {
+                                this.consoleError("Failed to update now playing: ", e);
+                            }))
                     }
                 }
             }
@@ -674,7 +676,11 @@ class Spotify {
                     id: track.id,
                     song_title: track.name,
                     artist: track.artists.map(a => a.name).join(', '),
-                    album: track.album
+                    album: {
+                        id: track.album.id,
+                        images: track.album.images,
+                        name: track.album.name
+                    }
                 }
             };
             this.nowPlaying = {
