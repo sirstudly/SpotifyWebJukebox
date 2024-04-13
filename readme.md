@@ -47,9 +47,9 @@ v1.0
 
 - [ ] Show more than one song in the "Up next" list
 - [ ] Show more than 20 tracks when searching 
-- [ ] Add ability to set playlist, set album, set artist radio, etc...
-- [ ] Set shuffle mode, repeat, etc.
 - [ ] Setup WSS server and push out notifications rather than poll every second
+- [ ] Persist auth tokens somewhere so it will survive a server restart
+- [ ] Default to currently active device (otherwise use preferred device)
 
 ## **NowPlaying Changelog**
 
@@ -158,14 +158,14 @@ Edit those values:
 - `YOUR_CLIENT_ID` by your Client ID available on your app's panel,
 - `YOUR_CLIENT_SECRET` by your `Client Secret` available by clicking on the `Show Client Secret` button situated on the same webpage as your client ID,
 - `REDIRECT_URI` by your redirect URL to handle the exchange of a Spotify access code to an access token. Note: You'll also need to add this redirect URL to your App in your [Spotify Dashboard](https://developer.spotify.com/dashboard).
-- `PREFERRED_DEVICE_ID` by your preferred Spotify device ID to resume playback to if nothing is playing. Some devices don't support this.
+- `PREFERRED_DEVICE_ID` by your preferred Spotify device ID to resume playback to if nothing is playing. Some devices don't support this. Use the ``/get-devices`` endpoint to find your device ID.
 - `SHOW_PLAYBACK_CONTROLS` set to `true` to show play/pause/skip track buttons overlay
 
-Let's go back on our app's panel. You need to declare the URL where the `token.php` page is located, for a local hosting it would be in most cases `http://localhost/token.php`. Click on the green `Edit settings` button situated on the top of the page, then in the `Redirect URIs` text field, indicate yours. ***ATTENTION***: what you typed should **IMPERATIVELY** be the same as what you wrote in the two precedent files! Then click on the `SAVE` button on the very bottom of the form. Your app is declared and ready to use!
+Let's go back on our app's panel. You need to declare the URL where Spotify will redirect after initial authentication. For a local hosting it would be in most cases `http://localhost:3000/spotify`. Click on the green `Edit settings` button situated on the top of the page, then in the `Redirect URIs` text field, indicate yours. ***ATTENTION***: what you typed should **IMPERATIVELY** be the same as what you wrote above! Then click on the `SAVE` button on the very bottom of the form. Your app is declared and ready to use!
 
-Upon startup, we'll need to get the initial access/refresh tokens from Spotify. We'll also need a web-based token so we can register for change events.
+Upon startup, we'll need to get the initial access/refresh tokens from Spotify. We'll also need an elevated web-based token so we can register for change events.
 You'll be redirected first to the Spotify consent page where you'll be requested to login to your Spotify account.
-Once that is complete, there will be a following step to grab the session cookies for the web player. Instructions are on the page.
+Once that is complete, there will be a following step to grab the session cookie for the web player. Instructions are on the page.
 
 ## **Credits**
 This project is directly forked from [NowPlaying for Spotify by Busybox11](https://github.com/busybox11/NowPlaying-for-Spotify)

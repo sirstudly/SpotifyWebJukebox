@@ -76,7 +76,7 @@ app.get('/authenticate-web', (request, response) => {
 // use that token to initialize a websocket connection to spotify and listen in for change events
 app.post('/save-cookies', (request, response) => {
     if (request.body && request.body.data) {
-        spotify.refreshWebAuthTokenFromCurl(request.body.data)
+        spotify.refreshWebAuthToken(request.body.data)
             .then(() => spotify.resetWebsocket())
             .then(() => spotify._initWebsocket())
             // Perform other start-up tasks, now that we have access to the api
@@ -87,14 +87,6 @@ app.post('/save-cookies', (request, response) => {
     else {
         response.status(400).send({error: "Missing data."})
     }
-});
-
-app.get("/search", async (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    spotify.searchTracks(req.query.terms, 0, 20)
-        .then(state => res.status(200).send(state))
-        .catch(err => res.status(500).send({error: err.message}));
 });
 
 app.get("/search-all", async (req, res) => {

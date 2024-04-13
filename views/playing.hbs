@@ -20,6 +20,16 @@
     </script>
 
     <style>
+        /* prevent horizontal scrollbar on mobile: https://stackoverflow.com/a/71128244 */
+        html {
+            overflow-x: hidden;
+        }
+
+        body {
+            position: relative;
+            overflow-x: hidden;
+        }
+
         .custom-img-shadow {
             box-shadow:
                     0 5px 10px rgba(0, 0, 0, 0.12),
@@ -68,24 +78,8 @@
         .clear-input--touched + .clear-input-button:hover {
             display: inline-flex;
         }
-    </style>
 
-    <!-- Font -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200..900&display=swap" rel="stylesheet">
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
 
-    <link href="https://unpkg.com/flickity@2/dist/flickity.css" rel="stylesheet">
-    <script src="https://unpkg.com/flickity@2/dist/flickity.pkgd.min.js"></script>
-
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tw-elements/dist/css/tw-elements.min.css"/>
-    <script src="https://cdn.tailwindcss.com/3.3.0"></script>
-
-    <script src="assets/js/scripts.js?v=20240229"></script>
-    <script src="assets/js/playing.js?v=20240229"></script>
-
-    <style>
         /* external css: flickity.css */
 
         .carousel {
@@ -108,8 +102,8 @@
 
         .carousel-cell img {
             display: block;
-            max-width: 100%;
-            max-height: 100%;
+            max-width: 300px;
+            max-height: 300px;
             /* dim unselected */
             opacity: 0.7;
             -webkit-transform: scale(0.85);
@@ -152,9 +146,16 @@
             background: transparent;
             opacity: 1;
         }
+        button.flickity-button:hover {
+            background: white;
+            opacity: 0.6;
+        }
         /* arrow color */
         .flickity-prev-next-button .arrow {
             fill: white;
+        }
+        button.flickity-prev-next-button:hover .arrow {
+            fill: black;
         }
         .flickity-prev-next-button.no-svg {
             color: white;
@@ -167,6 +168,20 @@
             display: none;
         }
     </style>
+
+    <!-- Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200..900&display=swap" rel="stylesheet">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+
+    <link href="https://unpkg.com/flickity@2/dist/flickity.css" rel="stylesheet">
+    <script src="https://unpkg.com/flickity@2/dist/flickity.pkgd.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tw-elements/dist/css/tw-elements.min.css"/>
+
+    <script src="assets/js/scripts.js?v=20240229"></script>
+    <script src="assets/js/playing.js?v=20240229"></script>
 </head>
 <body
         x-data="{
@@ -323,10 +338,10 @@
                 <div class="z-30 flex flex-row justify-end">
                     <!-- Button trigger modal -->
                     <button class="z-30 flex flex-row items-center gap-2 px-4 py-1 bg-white/10 border border-white/40 text-white/80 rounded-full"
-                            data-te-toggle="modal"
-                            data-te-target="#queueModal"
-                            data-te-ripple-init
-                            data-te-ripple-color="light">
+                            data-twe-toggle="modal"
+                            data-twe-target="#queueModal"
+                            data-twe-ripple-init
+                            data-twe-ripple-color="light">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-6 w-6" fill="currentColor"><path d="M16.5 3H21.5C22.3 3 23 3.7 23 4.5V7.5C23 8.3 22.3 9 21.5 9H18L15 12V4.5C15 3.7 15.7 3 16.5 3M3 3C1.9 3 1 3.9 1 5V19C1 20.1 1.9 21 3 21H11C12.1 21 13 20.1 13 19V5C13 3.9 12.1 3 11 3H3M7 5C8.1 5 9 5.9 9 7S8.1 9 7 9 5 8.1 5 7 5.9 5 7 5M7 11C9.2 11 11 12.8 11 15S9.2 19 7 19 3 17.2 3 15 4.8 11 7 11M7 13C5.9 13 5 13.9 5 15S5.9 17 7 17 9 16.1 9 15 8.1 13 7 13" /></svg>
                         <span>Queue a Song</span>
                     </button>
@@ -338,9 +353,9 @@
 </div>
 
 <!-- Modal -->
-<div data-te-modal-init class="fixed left-0 top-10 z-[1055] px-1 py-1 hidden h-full w-full overflow-y-auto overflow-x-hidden outline-none"
+<div data-twe-modal-init class="fixed left-0 top-10 z-[1055] px-1 py-1 hidden h-full w-full overflow-y-auto overflow-x-hidden outline-none"
      id="queueModal" tabindex="-1" aria-labelledby="queueModalLabel" aria-hidden="true">
-    <div data-te-modal-dialog-ref class="pointer-events-none relative w-auto translate-y-[-50px] opacity-0 transition-all duration-300 ease-in-out min-[576px]:mx-auto min-[576px]:mt-7 min-[576px]:max-w-[500px]">
+    <div data-twe-modal-dialog-ref class="pointer-events-none relative w-auto translate-y-[-50px] opacity-0 transition-all duration-300 ease-in-out min-[576px]:mx-auto min-[576px]:mt-7 min-[576px]:max-w-[500px]">
         <div class="min-[576px]:shadow-[0_0.5rem_1rem_rgba(#000, 0.15)] pointer-events-auto relative flex w-full flex-col rounded-md border-none bg-clip-padding text-current shadow-lg outline-none bg-slate-800">
             <div class="flex flex-shrink-0 items-center justify-between rounded-t-md border-b-2 border-neutral-100 border-opacity-100 p-4 dark:border-opacity-50">
                 <!--Modal title-->
@@ -350,7 +365,7 @@
                 <!--Close button-->
                 <button type="button"
                         class="box-content rounded-none border-none text-white hover:no-underline hover:opacity-75 focus:opacity-100 focus:shadow-none focus:outline-none"
-                        data-te-modal-dismiss aria-label="Close">
+                        data-twe-modal-dismiss aria-label="Close">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-6 w-6">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -361,35 +376,65 @@
             <!--alpinejs example: https://alpinejs.codewithhugo.com/fetch-data/ -->
             <!-- https://dberri.com/lets-build-an-ajax-form-with-alpine-js/ -->
             <!-- https://ember.2038.io/slider.html -->
-            <div x-data="spotifySearch()" x-init="$watch('searchResults', value => resetCarousel())" class="relative flex-auto p-2" data-te-modal-body-ref>
-                <div class="flex flex-row gap-2 py-1">
+            <div x-data="spotifySearch()" x-init="$watch('searchResults', value => resetCarousel())" class="relative flex-auto p-2" data-twe-modal-body-ref>
+                <div class="flex flex-row gap-2 py-1" data-twe-dropdown-ref>
                     <!-- https://nikitahl.com/input-clear-button -->
                     <div class="clear-input-container flex w-2/3">
-                        <input type="text" name="spotifySearchInput" x-model="spotifySearchInput" x-on:keyup="doSearch();" class="clear-input w-full bg-white focus:outline-none focus:shadow-outline border border-gray-300 rounded-lg p-2 appearance-none leading-normal">
+                        <input type="text" name="spotifySearchInput" x-model="spotifySearchInput" class="clear-input w-full bg-white focus:outline-none focus:shadow-outline border border-gray-300 rounded-lg p-2 appearance-none leading-normal">
                         <button class="clear-input-button" aria-label="Clear input" title="Clear input">
                             &times;
                         </button>
                     </div>
-                    <button type="button" @click="doSearch()" class="ml-1 inline-block rounded bg-primary bg-sky-800 px-6 pb-2 pt-2.5 text-xs font-medium uppercase leading-normal text-white shadow-[0_4px_9px_-4px_#3b71ca] transition duration-150 ease-in-out hover:bg-primary-600 hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:bg-primary-600 focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:outline-none focus:ring-0 active:bg-primary-700 active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] dark:shadow-[0_4px_9px_-4px_rgba(59,113,202,0.5)] dark:hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)]"
+                    <button type="button" @click="doSearch('track')" class="ml-1 inline-block rounded bg-indigo-600 px-6 pb-2 pt-2.5 text-xs font-medium uppercase leading-normal text-white transition duration-150 ease-in-out hover:bg-indigo-800 focus:outline-none focus:ring-0"
                             :class="[ isLoading ? 'opacity-50 cursor-not-allowed' : 'active:bg-primary-700 hover:bg-primary-600' ]" :disabled="isLoading"
-                            data-te-ripple-init data-te-ripple-color="light">
+                            data-twe-ripple-init data-twe-ripple-color="light">
                         Search
                     </button>
+                    <button type="button" class="inline-block rounded bg-indigo-600 px-3 pb-2 text-xs font-medium uppercase leading-normal text-white transition duration-150 ease-in-out hover:bg-indigo-800 focus:outline-none focus:ring-0"
+                            :class="[ isLoading ? 'opacity-50 cursor-not-allowed' : 'active:bg-primary-700 hover:bg-primary-600' ]" :disabled="isLoading"
+                            data-twe-ripple-init data-twe-ripple-color="light"
+                            id="dropdownMenuButton3"
+                            data-twe-dropdown-toggle-ref>
+                        <span class="ms-2 w-2 [&>svg]:h-5 [&>svg]:w-5">
+                            <svg fill="#FFFFFF" width="20px" height="20px" viewBox="0 0 256 256" id="Flat" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M128,188a11.96187,11.96187,0,0,1-8.48535-3.51465l-80-80a12.0001,12.0001,0,0,1,16.9707-16.9707L128,159.0293l71.51465-71.51465a12.0001,12.0001,0,0,1,16.9707,16.9707l-80,80A11.96187,11.96187,0,0,1,128,188Z"/>
+                            </svg>
+                        </span>
+                    </button>
+                    <ul class="absolute z-[1000] float-left m-0 hidden min-w-max list-none overflow-hidden rounded-lg border-none bg-white bg-clip-padding text-base shadow-lg data-[twe-dropdown-show]:block dark:bg-surface-dark"
+                        aria-labelledby="dropdownMenuButton3"
+                        data-twe-dropdown-menu-ref>
+                        <li>
+                            <a class="block w-full whitespace-nowrap bg-neutral-800 px-4 py-2 text-sm font-normal text-neutral-200 hover:bg-zinc-200/60 focus:bg-zinc-200/60 focus:outline-none active:bg-zinc-200/60 active:no-underline hover:text-neutral-800"
+                               @click="doSearch('artist')"
+                               data-twe-dropdown-item-ref>Artist Search</a>
+                        </li>
+                        <li>
+                            <a class="block w-full whitespace-nowrap bg-neutral-800 px-4 py-2 text-sm font-normal text-neutral-200 hover:bg-zinc-200/60 focus:bg-zinc-200/60 focus:outline-none active:bg-zinc-200/60 active:no-underline hover:text-neutral-800"
+                               @click="doSearch('album')"
+                               data-twe-dropdown-item-ref>Album Search</a>
+                        </li>
+                        <li>
+                            <a class="block w-full whitespace-nowrap bg-neutral-800 px-4 py-2 text-sm font-normal text-neutral-200 hover:bg-zinc-200/60 focus:bg-zinc-200/60 focus:outline-none active:bg-zinc-200/60 active:no-underline hover:text-neutral-800"
+                               @click="doSearch('playlist')"
+                               data-twe-dropdown-item-ref>Playlist Search</a>
+                        </li>
+                    </ul>
                 </div>
                 <div x-cloak x-show="message" class="flex flex-row gap-2 py-1 pl-4 text-sm"
                      x-transition:enter.duration.100ms
                      x-transition:leave.duration.500ms>
                     <span x-text="message" :class="isError ? 'text-red-500' : 'text-yellow-300'"></span>
                 </div>
-                <div class="carousel js-flickity" data-flickity='{ "draggable": true, "pageDots": false }'>
-                    <template x-if="searchResults">
-                        <template x-for="track in searchResults.tracks.items" :key="track.uri">
+                <div x-cloak="searchResults" x-show="searchResults" class="carousel js-flickity" data-flickity='{ "draggable": true, "pageDots": false }'>
+                        <template x-for="track in searchResults?.tracks?.items" :key="track.uri">
                             <div class="carousel-cell">
                                 <div class="text-sm justify-center flex flex-col">
-                                    <template x-for="image in track.album.images">
-                                        <template x-if="image.height == 300">
-                                            <img :src="image.url">
-                                        </template>
+                                    <template x-if="track.album.images.length > 1">
+                                        <img :src="track.album.images[1].url">
+                                    </template>
+                                    <template x-if="track.album.images.length == 1">
+                                        <img :src="track.album.images[0].url">
                                     </template>
                                     <h3 class="text-white text-base font-bold leading-none mb-2" x-text="track.name"></h3>
                                     <h4 class="text-slate-300 text-sm font-bold leading-none mb-2" x-text="track.album.artists.map(artist => artist.name).join(',')"></h4>
@@ -399,6 +444,70 @@
                                 </div>
                             </div>
                         </template>
+
+                        <!------ ARTIST SEARCH RESULTS ------->
+                        <template x-for="artist in searchResults?.artists?.items" :key="artist.uri">
+                            <div class="carousel-cell">
+                                <div class="text-sm justify-center flex flex-col">
+                                    <template x-if="artist.images.length > 1">
+                                        <img :src="artist.images[1].url">
+                                    </template>
+                                    <template x-if="artist.images.length == 1">
+                                        <img :src="artist.images[0].url">
+                                    </template>
+                                    <h3 class="text-white text-base font-bold leading-none mb-2" x-text="artist.name"></h3>
+                                    <div class="flex flex-row justify-center my-1">
+                                        <button @click="playItem('artist', artist.name, artist.uri)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Play Artist</button>
+                                    </div>
+                                    <div class="flex flex-row justify-center my-1">
+                                        <button @click="playRadio('artist', artist.name, artist.id)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Play Artist Radio</button>
+                                    </div>
+                                </div>
+                            </div>
+                    </template>
+
+                    <!------ ALBUM SEARCH RESULTS ------->
+                    <template x-for="album in searchResults?.albums?.items" :key="album.uri">
+                        <div class="carousel-cell">
+                            <div class="text-sm justify-center flex flex-col">
+                                <template x-if="album.images.length > 1">
+                                    <img :src="album.images[1].url">
+                                </template>
+                                <template x-if="album.images.length == 1">
+                                    <img :src="album.images[0].url">
+                                </template>
+                                <h3 class="text-white text-base font-bold leading-none mb-2" x-text="album.name"></h3>
+                                <h4 class="text-slate-300 text-sm font-bold leading-none mb-2" x-text="album.artists.map(artist => artist.name).join(',')"></h4>
+                                <div class="flex flex-row justify-center my-1">
+                                    <button @click="playItem('album', album.name, album.uri)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Play Album</button>
+                                </div>
+                                <div class="flex flex-row justify-center my-1">
+                                    <button @click="playRadio('album', album.name, album.id)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Play Album Radio</button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!------ PLAYLIST SEARCH RESULTS ------->
+                    <template x-for="playlist in searchResults?.playlists?.items" :key="playlist.uri">
+                        <div class="carousel-cell">
+                            <div class="text-sm justify-center flex flex-col">
+                                <template x-if="playlist.images.length > 1">
+                                    <img :src="playlist.images[1].url">
+                                </template>
+                                <template x-if="playlist.images.length == 1">
+                                    <img :src="playlist.images[0].url">
+                                </template>
+                                <h3 class="text-white text-base font-bold leading-none mb-2" x-text="playlist.name"></h3>
+                                <h4 class="text-slate-300 text-sm font-bold leading-none mb-2" x-text="playlist.owner.display_name"></h4>
+                                <div class="flex flex-row justify-center my-1">
+                                    <button @click="playItem('playlist', playlist.name, playlist.uri)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Set Playlist</button>
+                                </div>
+                                <div class="flex flex-row justify-center my-1">
+                                    <button @click="playRadio('playlist', playlist.name, playlist.id)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Play Playlist Radio</button>
+                                </div>
+                            </div>
+                        </div>
                     </template>
                 </div>
             </div>
@@ -444,46 +553,49 @@
             spotifySearchInput: "",
             searchResults: null,
             isLoading: false,
-            searchTimeout: null,
             message: null,
             isError: false,
-            doSearch() {
-                // on first load, remove the empty "template" element so it doesn't render a blank page dot
-                // if (this.spotifySearchInput.length == 0 && $('.carousel').data('flickity').cells) {
-                //     $('.carousel').data('flickity').cells.shift();
-                //     $('.carousel').flickity('resize');
-                //     console.log("done spotifySearch() RESET");
-                // }
-
-                // Clear the timeout if it has already been set.
-                // This will prevent the previous task from executing
-                // if it has been less than <MILLISECONDS>
-                clearTimeout(this.searchTimeout);
+            doSearch(searchType) {
                 this.isLoading = true;
-                let this_instance = this; // keep a reference to this scope so it's accessible below
-
-                // Make a new timeout set to go off in 2 sec
-                this.searchTimeout = setTimeout(function () {
-                    if (this_instance.spotifySearchInput.length) {
-                        fetch(`/search?terms=${this_instance.spotifySearchInput}`)
-                                .then((res) => res.json())
-                                .then((data) => {
-                                    this_instance.isLoading = false;
-                                    this_instance.searchResults = data;
-                                })
-                    }
-                }, 2000);
+                if (this.spotifySearchInput.length) {
+                    fetch(`/search-all?types=${searchType}&terms=${encodeURIComponent(this.spotifySearchInput)}`)
+                            .then(res => res.json())
+                            .then(data => {
+                                this.isLoading = false;
+                                this.searchResults = data;
+                            })
+                            .catch(err => this.setMessage("Something wonky happened. Try again later. " + err.message))
+                }
+                else {
+                    this.isLoading = false;
+                }
             },
             resetCarousel() {
-                console.log("RESETTING CAROUSEL");
-                $('.carousel').flickity('reloadCells');
-                // bit of a hack; the two "template" elements appear as additional cells at the start of the cells array
-                // so remove the two extra elements
-                $('.carousel').data('flickity').cells.shift();
-                $('.carousel').data('flickity').cells.shift();
-                $('.carousel')
-                        .flickity('resize')
-                        .flickity('selectCell', 0);
+                if ($('.carousel').length) {
+                    $('.carousel').flickity('reloadCells')
+                    // bit of a hack; the two "template" elements appear as additional cells at the start/end of the cells array
+
+                    // remove the template elements from the end of the carousel
+                    for (let carouselLen = $('.carousel').data('flickity').cells.length;
+                         $('.carousel').data('flickity').cells[carouselLen - 1].element.tagName == 'TEMPLATE';
+                         carouselLen--) {
+                        $('.carousel').data('flickity').cells.pop();
+                    }
+
+                    // remove the template elements from the front of the carousel
+                    while ($('.carousel').data('flickity').cells[0].element.tagName == 'TEMPLATE') {
+                        $('.carousel').data('flickity').cells.shift();
+                    }
+
+                    $('.carousel')
+                            .flickity('resize')
+                            .flickity('selectCell', 0)
+
+                    // Fix overlapping images on first load: https://github.com/metafizzy/flickity/issues/206
+                    setTimeout(function () {
+                        window.dispatchEvent(new Event('resize'));
+                    }, 200);
+                }
             },
             setMessage(text, is_error = false) {
                 this.message = text;
@@ -491,14 +603,12 @@
                 setTimeout(() => {
                     this.message = null;
                     this.isError = false;
-                }, 5000);
+                }, 10000); // set visibility for 10 seconds
             },
             queueTrack(trackUri) {
-                console.log("QUEUE TRACK " + trackUri);
                 if (trackUri) {
                     fetch(`/queue-track?trackUri=${trackUri}`)
                         .then(res => {
-console.log("queue track", res);
                             if (res.ok) {
                                 this.setMessage("Track queued.")
                             }
@@ -508,6 +618,30 @@ console.log("queue track", res);
                         })
                         .catch(err => this.setMessage(err.message, true));
                 }
+            },
+            playItem(itemType, itemName, itemUri) {
+                fetch(`/play?contextUri=${itemUri}`)
+                        .then(res => {
+                            if (res.ok) {
+                                this.setMessage(`Playing ${itemType} ${itemName}`)
+                            }
+                            else {
+                                res.json().then(msg => this.setMessage(msg.error, true))
+                            }
+                        })
+                        .catch(err => this.setMessage(err.message, true));
+            },
+            playRadio(itemType, itemName, itemId) {
+                fetch(`/play?contextUri=spotify:radio:${itemType}:${itemId}`)
+                        .then(res => {
+                            if (res.ok) {
+                                this.setMessage("Playing " + itemName + " radio")
+                            }
+                            else {
+                                res.json().then(msg => this.setMessage(msg.error, true))
+                            }
+                        })
+                        .catch(err => this.setMessage(err.message, true));
             }
         }
     }
@@ -534,6 +668,7 @@ console.log("queue track", res);
 </script>
 
 <!-- TW Elements is free under AGPL, with commercial license required for specific uses. See more details: https://tw-elements.com/license/ and contact us for queries at tailwind@mdbootstrap.com -->
-<script src="https://cdn.jsdelivr.net/npm/tw-elements/dist/js/tw-elements.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tw-elements@2.0.0/js/tw-elements.umd.min.js"></script>
+
 </body>
 </html>

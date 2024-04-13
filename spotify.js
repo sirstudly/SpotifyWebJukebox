@@ -10,7 +10,7 @@ dotenv.config();
 class Spotify {
 
     // (re)attempt a task, a given number of times
-    async runTask(task, limit = 5) {
+    async runTask(task, limit = 2) {
         return task().catch(async(e) => {
             this.consoleError(`Attempt failed, ${limit} tries remaining.`, e);
             if (e.message == "Unauthorized") {
@@ -41,46 +41,19 @@ class Spotify {
     }
 
     /**
-     * Takes the cookies from the cURL command given. In Chrome dev tools (F12), under the Network tab,
-     * right click, Copy, Copy as cURL.
-     * @param curlCommand the copied cURL command
-     * @returns {Promise} cookie string or Exception if not found
-     */
-    stripCookiesFromCurl(curlCommand) {
-        const cookieLine = curlCommand.split("\n").filter(line => line.indexOf("cookie:") >= 0);
-        if (cookieLine.length == 0) {
-            return Promise.reject(new Error("Unable to find any cookies?"));
-        }
-        const firstIndex = cookieLine[0].indexOf("cookie:") + "cookie:".length + 1;
-        const lastIndex = cookieLine[0].lastIndexOf("'");
-        if (lastIndex < firstIndex) {
-            return Promise.reject(new Error("Unable to find the proper cookie header"));
-        }
-        return Promise.resolve(cookieLine[0].substring(firstIndex, lastIndex));
-    }
-
-    /**
-     * Calls #refreshWebAuthToken with the cookies extracted from the cURL command
-     * @param curlCommand
-     * @returns {Promise<void>}
-     */
-    async refreshWebAuthTokenFromCurl(curlCommand) {
-        return this.stripCookiesFromCurl(curlCommand)
-            .then(cookies => this.refreshWebAuthToken(cookies));
-    }
-
-    /**
      * Web token is used as bearer authorization for certain (unpublished) API requests.
+     * @param sp_dc this is the http-only cookie value from a logged in spotify web client
      */
-    async refreshWebAuthToken(cookies = null) {
-        if (cookies == null) {
-            cookies = this.web_auth.cookies;
+    async refreshWebAuthToken(sp_dc = null) {
+        if (sp_dc == null) {
+            sp_dc = this.web_auth.cookies;
         }
+        this.consoleInfo("Attempting to retreive web auth token with sp_dc: " + sp_dc);
         this.web_auth = await agent.get("https://open.spotify.com/get_access_token")
             .query({reason: "transport", productType: "web_player"})
             .set('Content-Type', 'application/json')
             .set('User-Agent', USER_AGENT)
-            .set('Cookie', cookies)
+            .set('Cookie', "sp_dc=" + sp_dc)
             // .use(superdebug.default(console.info))
             .then(resp => {
                 // isAnonymous should be false (Spotify should be able to identify who's account it is)
@@ -92,7 +65,7 @@ class Spotify {
                     expires_at: resp.body.accessTokenExpirationTimestampMs
                 }
             });
-        this.web_auth.cookies = cookies;
+        this.web_auth.cookies = sp_dc;
         this.consoleInfo("Web Access Token:", this.web_auth.access_token);
         return Promise.resolve('OK');
     }
@@ -165,16 +138,6 @@ class Spotify {
         };
     }
 
-    async searchTracks(terms, skip = 0, limit = 10) {
-        if (!this.isAuthTokenValid()) {
-            await this.refreshAuthToken();
-        }
-        return this.runTask(async () => {
-            const result = await this.api.searchTracks(terms, {offset: skip, limit: limit});
-            return result.body;
-        });
-    }
-
     async search(terms, types, skip = 0, limit = 10) {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
@@ -236,10 +199,8 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return this.runTask(async () => {
-            const result = await this.api.getTracks(trackIds);
-            return result.body.tracks;
-        });
+        const result = await this.api.getTracks(trackIds);
+        return result.body.tracks;
     }
 
     async getAlbum(albumId) {
@@ -404,6 +365,7 @@ class Spotify {
     }
 
     async play(uri) {
+        this.consoleInfo("play request: ", uri);
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
@@ -413,27 +375,12 @@ class Spotify {
             if (uri.indexOf('station') < 0 && uri.indexOf('radio') < 0) {
                 response = await this.api.play({device_id: process.env.PREFERRED_DEVICE_ID, context_uri: uri});
             } else {
-                const webPlayerId = await this._getWebPlayerId();
-                response = await this._play(uri, webPlayerId, process.env.PREFERRED_DEVICE_ID);
+                response = await this._play(uri, this.fakeDeviceId, process.env.PREFERRED_DEVICE_ID);
             }
             this.consoleInfo("play response:", response);
             await this.forceRepeatShuffle();
             return response;
         });
-    }
-
-    async _getWebPlayerId() {
-        let devices = await this.getMyDevices();
-        const fn_filter_web_player = dev => dev.name == "Web Player (Chrome)";
-        devices = devices.body.devices.filter(fn_filter_web_player);
-        if (devices.length == 0) {
-            devices = await this.getMyDevices();
-            devices = devices.body.devices.filter(fn_filter_web_player);
-            if (devices.length == 0) {
-                throw new ReferenceError("Error looking up device. Please try again later.");
-            }
-        }
-        return devices[0].id;
     }
 
     /**
@@ -445,6 +392,7 @@ class Spotify {
      * @private
      */
     async _play(uri, fromDeviceId, toDeviceId) {
+        this.consoleInfo("Request to _play: " + uri);
         if (!this.isWebAuthTokenValid()) {
             await this.refreshWebAuthToken();
         }
@@ -477,7 +425,7 @@ class Spotify {
             })
             .then(resp => JSON.parse(resp.text))
             .catch(err => {
-                this.consoleError("Failed to play radio.", err);
+                this.consoleError("Failed to play uri: " + uri, err);
                 throw err;
             });
     }
@@ -565,8 +513,13 @@ class Spotify {
                 return JSON.parse(resp.text);
             })
             .catch(err => {
-                this.consoleError("Failed to register for notifications.", err);
-                throw err;
+                if (err.statusCode == 429) {
+                    this.consoleError("Too many requests. Swallowing exception", err);
+                }
+                else {
+                    this.consoleError("Failed to register for notifications.", err);
+                    throw err;
+                }
             });
     }
 
@@ -638,8 +591,13 @@ class Spotify {
                         .then(() => this.registerDeviceForNotifications())
                         .then(resp => this._updateNowPlaying(resp.player_state))
                         .catch(err => {
-                            this.consoleError("Failed to register for notifications", err);
-                            this.ws.isAlive = false; // try again by forcing connection reset
+                            if (err.statusCode == 429) {
+                                this.consoleError("Too many requests. Swallowing exception", err);
+                            }
+                            else {
+                                this.consoleError("Failed to register for notifications.", err);
+                                this.ws.isAlive = false; // try again by forcing connection reset
+                            }
                         });
                 }
                 else {
@@ -747,26 +705,6 @@ class Spotify {
         if (playback.body && !playback.body?.actions?.disallows?.toggling_shuffle && playback.body.shuffle_state == false) {
             await this.setShuffle();
         }
-    }
-
-    setArtistRadio(artistId) {
-        return this.webqueue(() => this._setContextRadio(() => this.api.getArtist(artistId)));
-    }
-
-    setAlbumRadio(albumId) {
-        return this.webqueue(() => this._setContextRadio(() => this.api.getAlbum(albumId)));
-    }
-
-    setPlaylistRadio(playlistId) {
-        return this.webqueue(() => this._setContextRadio(() => this.api.getPlaylist(playlistId)));
-    }
-
-    async _setContextRadio(fnRetrieveitem) {
-        await this._verifyPlaybackState();
-
-        const item = await fnRetrieveitem();
-        this.consoleInfo(`Attempting to set ${item.body.name} ${item.body.type} radio.`);
-        return await this.play(`spotify:radio:${item.body.type}:${item.body.id}`);
     }
 
     /**

@@ -55,14 +55,13 @@
             We'll also need to borrow a logged in web session so we can monitor change events just like the Spotify Web Player does.
         </div>
         <div>
-            Login to <a class="underline" href="https://open.spotify.com/">https://open.spotify.com/</a>, open the Developer console (F12 in Chrome)
-            and click on the Network tab. If you were already logged in, reload the page. Under the filter input box, type
-            <span class="font-mono px-1">queue</span> or <span class="font-mono px-1">get_access_token</span> to filter
-            on these requests. There should be at least one. Right click on any of the rows and select Copy, and Copy as cURL.
+            Login to <a class="underline" href="https://open.spotify.com/" target="_blank">https://open.spotify.com/</a>, open the Developer console (F12 in Chrome)
+            and click on the Application tab. Under Storage, Cookies (open.spotify.com) find the row labeled <span class="font-mono px-1">sp_dc</span>
+            and copy the value to your clipboard. You can close the web player but don't log out or it will invalidate the cookie.
         </div>
     </div>
 
-    <h3 class="text-base lg:text-xl font-bold mt-3">Paste the clipboard contents into the box below and click Save.</h3>
+    <h3 class="text-base lg:text-xl font-bold mt-3">Paste the cookie value into the box below and click Save.</h3>
 
     <form action="/save-cookies" method="POST" class="flex flex-col w-full items-center" x-data="cookieForm()" @submit.prevent="submitData">
         <div x-show="messageText" class="flex flex-row mt-1"
@@ -104,7 +103,7 @@
                 })
                 .then(response => {
                     if (response.ok) {
-                        this.setMessage('Cookies saved! Please wait, redirecting...');
+                        this.setMessage('Cookie saved! Please wait, redirecting...');
                         window.location.replace("/");
                     }
                     else {
