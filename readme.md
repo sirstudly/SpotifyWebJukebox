@@ -158,7 +158,7 @@ Edit those values:
 - `YOUR_CLIENT_ID` by your Client ID available on your app's panel,
 - `YOUR_CLIENT_SECRET` by your `Client Secret` available by clicking on the `Show Client Secret` button situated on the same webpage as your client ID,
 - `REDIRECT_URI` by your redirect URL to handle the exchange of a Spotify access code to an access token. Note: You'll also need to add this redirect URL to your App in your [Spotify Dashboard](https://developer.spotify.com/dashboard).
-- `PREFERRED_DEVICE_ID` by your preferred Spotify device ID to resume playback to if nothing is playing. Some devices don't support this. Use the ``/get-devices`` endpoint to find your device ID.
+- `PREFERRED_DEVICE_ID` (optional) by your preferred Spotify device ID to resume playback to if nothing is playing. Some devices don't support this. Use the ``/get-devices`` endpoint to find your device ID.
 - `SHOW_PLAYBACK_CONTROLS` set to `true` to show play/pause/skip track buttons overlay
 
 Let's go back on our app's panel. You need to declare the URL where Spotify will redirect after initial authentication. For a local hosting it would be in most cases `http://localhost:3000/spotify`. Click on the green `Edit settings` button situated on the top of the page, then in the `Redirect URIs` text field, indicate yours. ***ATTENTION***: what you typed should **IMPERATIVELY** be the same as what you wrote above! Then click on the `SAVE` button on the very bottom of the form. Your app is declared and ready to use!

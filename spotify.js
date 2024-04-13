@@ -240,6 +240,22 @@ class Spotify {
         return await this.api.getMyDevices();
     }
 
+    /**
+     * Returns the current playback device (if active), otherwise returns the preferred device id.
+     * @returns string device id
+     */
+    async getPlaybackDeviceId() {
+        const activeDevice = await this.getMyDevices()
+            .then(resp => resp.body.devices.find(d => d.is_active));
+        if (activeDevice) {
+            return activeDevice.id;
+        }
+        else if (process.env.PREFERRED_DEVICE_ID) {
+            return process.env.PREFERRED_DEVICE_ID;
+        }
+        throw new Error("No playback device found.");
+    }
+
     async transferPlaybackToDevice(deviceId, playNow) {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
@@ -341,8 +357,8 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return await this.runTask(() => {
-            return this.api.play({device_id: process.env.PREFERRED_DEVICE_ID});
+        return await this.runTask(async() => {
+            return this.api.play({device_id: await this.getPlaybackDeviceId()});
         });
     }
 
@@ -372,10 +388,11 @@ class Spotify {
         return await this.runTask(async () => {
             let response;
             // official API does not support station/radio
-            if (uri.indexOf('station') < 0 && uri.indexOf('radio') < 0) {
-                response = await this.api.play({device_id: process.env.PREFERRED_DEVICE_ID, context_uri: uri});
-            } else {
-                response = await this._play(uri, this.fakeDeviceId, process.env.PREFERRED_DEVICE_ID);
+            if (uri.indexOf(':station:') < 0 && uri.indexOf(':radio:') < 0) {
+                response = await this.api.play({device_id: await this.getPlaybackDeviceId(), context_uri: uri});
+            }
+            else {
+                response = await this._play(uri, this.fakeDeviceId, await this.getPlaybackDeviceId());
             }
             this.consoleInfo("play response:", response);
             await this.forceRepeatShuffle();
@@ -679,12 +696,12 @@ class Spotify {
             // do we have anything to play
             if (!playback.body || (playback.body.context == null && playback.body.item == null)) {
                 await this.api.play({
-                    device_id: process.env.PREFERRED_DEVICE_ID,
+                    device_id: await this.getPlaybackDeviceId(),
                     context_uri: this.nowPlaying && this.nowPlaying.context && this.nowPlaying.context.uri ?
                         this.nowPlaying.context.uri : process.env.SPOTIFY_FALLBACK_PLAYLIST_URI
                 });
             } else { // resume previous context
-                await this.api.play({device_id: process.env.PREFERRED_DEVICE_ID});
+                await this.api.play({device_id: await this.getPlaybackDeviceId()});
             }
         }
         await this.forceRepeatShuffle(playback);
