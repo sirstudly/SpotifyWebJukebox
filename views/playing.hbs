@@ -439,7 +439,7 @@
                                     <h3 class="text-white text-base font-bold leading-none mb-2" x-text="track.name"></h3>
                                     <h4 class="text-slate-300 text-sm font-bold leading-none mb-2" x-text="track.album.artists.map(artist => artist.name).join(',')"></h4>
                                     <div class="flex flex-row justify-center">
-                                        <button @click="queueTrack(track.uri)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Queue Track</button>
+                                        <button @click="queueTrack(track.uri)" :disabled="isLoading" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Queue Track</button>
                                     </div>
                                 </div>
                             </div>
@@ -607,6 +607,7 @@
             },
             queueTrack(trackUri) {
                 if (trackUri) {
+                    this.isLoading = true;
                     fetch(`/queue-track?trackUri=${trackUri}`)
                         .then(res => {
                             if (res.ok) {
@@ -616,7 +617,8 @@
                                 res.json().then(msg => this.setMessage(msg.error, true))
                             }
                         })
-                        .catch(err => this.setMessage(err.message, true));
+                        .catch(err => this.setMessage(err.message, true))
+                        .finally(() => this.isLoading = false);
                 }
             },
             playItem(itemType, itemName, itemUri) {

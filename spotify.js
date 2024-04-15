@@ -347,12 +347,26 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
+        if (this.isTrackQueued(trackURI)) {
+            throw new Error("Track already queued.");
+        }
         return this.runTask(async () => {
             await this._verifyPlaybackState();
             const result = await this.api.addToQueue(trackURI);
             this.consoleInfo("Queued track response:", result);
             return result;
         });
+    }
+
+    isTrackQueued(trackUri) {
+        const nowPlaying = this.getStatus();
+        if (nowPlaying && nowPlaying.now_playing && nowPlaying.now_playing.uri == trackUri) {
+            return true;
+        }
+        if (nowPlaying && nowPlaying.queued_tracks && nowPlaying.queued_tracks.length) {
+            return nowPlaying.queued_tracks.filter(t => t.uri == trackUri).length > 0;
+        }
+        return false;
     }
 
     async skipTrack() {
@@ -695,6 +709,7 @@ class Spotify {
             const getTrackInfo = (track) => {
                 return {
                     id: track.id,
+                    uri: track.uri,
                     song_title: track.name,
                     artist: track.artists.map(a => a.name).join(', '),
                     album: {

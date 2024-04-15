@@ -50,7 +50,7 @@ v1.0
 - [ ] Setup WSS server and push out notifications rather than poll every second
 - [X] Persist auth tokens somewhere so it will survive a server restart
 - [X] Default to currently active device (otherwise use preferred device)
-- [ ] Prevent duplicate songs from being queued
+- [X] Prevent duplicate songs from being queued
 - [ ] Prevent songs matching keywords from being queued, eg. "farts"
 - [ ] Find a way to uniquely identify users so they can be blacklisted?
 
