@@ -52,7 +52,8 @@ v1.0
 - [X] Default to currently active device (otherwise use preferred device)
 - [X] Prevent duplicate songs from being queued
 - [ ] Prevent songs matching keywords from being queued, eg. "farts"
-- [ ] Find a way to uniquely identify users so they can be blacklisted?
+- [X] Find a way to uniquely identify users so they can be blacklisted
+- [ ] Implement blacklist by sessionID
 
 ## **NowPlaying Changelog**
 

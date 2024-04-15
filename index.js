@@ -6,12 +6,19 @@ const spotify = require("./spotify");
 const path = require("path");
 const bodyParser = require("body-parser");
 const favicon = require('serve-favicon');
+const sessions = require('express-session');
 process.env.UV_THREADPOOL_SIZE = 128; // prevent ETIMEDOUT, ESOCKETTIMEDOUT
 
 const app = express();
 app.use(bodyParser.json());
 app.use('/assets', express.static('assets'))
 app.use(favicon(path.join(__dirname, 'assets', 'images', 'favicon.ico')));
+app.use(sessions({
+    secret: "spotify-web-jukebox-secret",
+    saveUninitialized: true,
+    cookie: {maxAge: 1000 * 60 * 60 * 24 * 90}, // 3 months
+    resave: false
+}));
 
 app.set('view engine', 'hbs'); // handlebars template engine
 app.set('views', path.join(__dirname, 'views'));
@@ -68,6 +75,9 @@ app.get("/", async (req, res) => {
 });
 
 app.get("/spotify", (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: received spotify auth code ${req.query.code}`);
     spotify.receivedAuthCode(req.query.code)
         .then((tokens) => res.redirect("/authenticate-web"))
         .catch(err => res.status(500).send({error: err.message}));
@@ -92,24 +102,28 @@ app.get('/authenticate-web', (request, response) => {
 
 // uses the cookies to retrieve a (web) access token
 // use that token to initialize a websocket connection to spotify and listen in for change events
-app.post('/save-cookies', (request, response) => {
-    if (request.body && request.body.data) {
-        spotify.refreshWebAuthToken(request.body.data)
+app.post('/save-cookies', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: save cookies=${req.body.data}`);
+    if (req.body && req.body.data) {
+        spotify.refreshWebAuthToken(req.body.data)
             .then(() => spotify.resetWebsocket())
             .then(() => spotify.initWebsocket())
             // Perform other start-up tasks, now that we have access to the api
             .then(() => spotify.initialized())
-            .then(() => response.status(200).send({status: "OK"}))
-            .catch(err => response.status(500).send({error: err.message}));
+            .then(() => res.status(200).send({status: "OK"}))
+            .catch(err => res.status(500).send({error: err.message}));
     }
     else {
-        response.status(400).send({error: "Missing data."})
+        res.status(400).send({error: "Missing data."})
     }
 });
 
 app.get("/search-all", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: search types=${req.query.types} terms=${req.query.terms}`);
     const types = req.query.types ? req.query.types.split(',') : ['track', 'album', 'artist', 'playlist'];
     const skip = req.query.skip ? parseInt(req.query.skip) : 0;
     const limit = req.query.limit ? parseInt(req.query.limit) : 20;
@@ -124,7 +138,7 @@ app.get("/now-playing", async (req, res) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.status(200).send(spotify.getStatus());
     }
-    // in case we we've just started up and the api hasn't been initialized yet...
+    // in case we've just started up and the api hasn't been initialized yet...
     if (spotify.api === undefined) {
         spotify.initializeTokensFromFile()
             .then(() => spotify.resetWebsocket())
@@ -149,6 +163,7 @@ app.get("/get-devices", async (req, res) => {
 app.get("/transfer-playback", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: requested transfer playback to device ${req.query.deviceId}`);
     spotify.transferPlaybackToDevice( req.query.deviceId, "true" === req.query.playNow )
         .then(state => res.status(200).send(state))
         .catch(err => res.status(500).send({error: err.message}));
@@ -157,6 +172,7 @@ app.get("/transfer-playback", async (req, res) => {
 app.get("/queue-track", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: queueing track ${req.query.trackUri}`);
     spotify.queueTrack(req.query.trackUri)
         .then(state => res.status(200).send(state))
         .catch(err => res.status(500).send({error: err.message}));
@@ -165,6 +181,7 @@ app.get("/queue-track", async (req, res) => {
 app.get("/play", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: requested play ${req.query.contextUri}`);
     spotify.play( req.query.contextUri )
         .then(state => res.status(200).send(state))
         .catch(err => res.status(500).send({error: err.message}));
@@ -189,6 +206,7 @@ app.get("/get-queue", async (req, res) => {
 app.get("/toggle-play", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: toggled play`);
     spotify.togglePlay()
         .then(() => res.status(200).send({status: "OK"}))
         .catch(err => res.status(500).send({error: err.message}));
@@ -197,6 +215,7 @@ app.get("/toggle-play", async (req, res) => {
 app.get("/next-track", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: toggled skip track`);
     spotify.skipTrack()
         .then(() => res.status(200).send({status: "OK"}))
         .catch(err => res.status(500).send({error: err.message}));
@@ -205,6 +224,7 @@ app.get("/next-track", async (req, res) => {
 app.get("/prev-track", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: toggled prev track`);
     spotify.prevTrack()
         .then(() => res.status(200).send({status: "OK"}))
         .catch(err => res.status(500).send({error: err.message}));
