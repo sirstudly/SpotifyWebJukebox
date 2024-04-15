@@ -4,7 +4,9 @@ const agent = require('superagent').agent();
 // const superdebug = require('superagent-debugger');
 const dotenv = require("dotenv");
 const crypto = require("crypto");
+const fs = require('fs')
 const USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/78.0.3904.97 Safari/537.36';
+const TOKENS_FILE = 'tokens.json';
 dotenv.config();
 
 class Spotify {
@@ -45,8 +47,11 @@ class Spotify {
      * @param sp_dc this is the http-only cookie value from a logged in spotify web client
      */
     async refreshWebAuthToken(sp_dc = null) {
-        if (sp_dc == null) {
-            sp_dc = this.web_auth.cookies;
+        if (sp_dc == null && this.web_auth && this.web_auth.sp_dc) {
+            sp_dc = this.web_auth.sp_dc;
+        }
+        if (sp_dc == undefined || sp_dc == null) {
+            return Promise.reject("Missing web authorization cookie!");
         }
         this.consoleInfo("Attempting to retreive web auth token with sp_dc: " + sp_dc);
         this.web_auth = await agent.get("https://open.spotify.com/get_access_token")
@@ -65,16 +70,63 @@ class Spotify {
                     expires_at: resp.body.accessTokenExpirationTimestampMs
                 }
             });
-        this.web_auth.cookies = sp_dc;
+        this.web_auth.sp_dc = sp_dc;
         this.consoleInfo("Web Access Token:", this.web_auth.access_token);
+        this.saveTokensToFile();
         return Promise.resolve('OK');
+    }
+
+    saveTokensToFile() {
+        const tokens = {};
+        if (this.web_auth) {
+            tokens.web_auth = this.web_auth;
+        }
+        if (this.auth) {
+            tokens.auth = {
+                access_token: this.auth.access_token,
+                refresh_token: this.auth.refresh_token,
+                expires_at: this.auth.expires_at
+            }
+        }
+
+        fs.writeFile(TOKENS_FILE, JSON.stringify(tokens, null, 4), (error) => {
+            if (error) {
+                this.consoleError("Error writing spotify tokens to file: " + TOKENS_FILE, error);
+            }
+            else {
+                this.consoleInfo("Spotify tokens written to file: " + TOKENS_FILE);
+            }
+        });
+    }
+
+    loadTokensFromFile() {
+        const tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, "utf8"));
+        this.auth = tokens.auth;
+        this.web_auth = tokens.web_auth;
+        this.consoleInfo("Loaded spotify tokens file: " + TOKENS_FILE);
+    }
+
+    async initializeTokensFromFile() {
+        try {
+            this.loadTokensFromFile();
+        }
+        catch (err) {
+            return Promise.reject("Failed to load spotify tokens. " + err.message)
+        }
+        this.api = new SpotifyWebApi({
+            clientId: process.env.CLIENT_ID,
+            clientSecret: process.env.CLIENT_SECRET,
+            accessToken: this.auth.access_token,
+            refreshToken: this.auth.refresh_token
+        });
+        return Promise.resolve("OK");
     }
 
     isAuthTokenValid() {
         if (this.auth == undefined || this.auth.expires_at == undefined) {
             return false;
         }
-        else if (this.auth.expires_at < new Date()) {
+        else if (this.auth.expires_at < new Date().getTime()) {
             return false;
         }
         return true;
@@ -84,7 +136,7 @@ class Spotify {
         if (this.web_auth == undefined || this.web_auth.expires_at == undefined) {
             return false;
         }
-        else if (this.web_auth.expires_at < new Date()) {
+        else if (this.web_auth.expires_at < new Date().getTime()) {
             return false;
         }
         return true;
@@ -96,18 +148,17 @@ class Spotify {
     }
 
     async refreshAuthToken() {
-        if (this.api === undefined) {
+        if (this.api === undefined || this.api.getAccessToken() === undefined) {
             return Promise.reject("Spotify not yet initialized...");
         }
         return this.api.refreshAccessToken()
             .then(result => {
-                const expiresAt = new Date();
-                expiresAt.setSeconds(expiresAt.getSeconds() + result.body.expires_in);
                 this.auth.access_token = result.body.access_token;
-                this.auth.expires_at = expiresAt;
+                this.auth.expires_at = result.body.expires_in * 1000 + new Date().getTime();
 
                 this.api.setAccessToken(result.body.access_token);
                 this.consoleInfo("Access Token:", result.body.access_token);
+                this.saveTokensToFile();
             })
     }
 
@@ -122,9 +173,7 @@ class Spotify {
         this.auth = authFlow.body;
 
         // Note the expiry time so that we can efficiently refresh the tokens
-        const expiresAt = new Date();
-        expiresAt.setSeconds(expiresAt.getSeconds() + authFlow.body.expires_in);
-        this.auth.expires_at = expiresAt;
+        this.auth.expires_at = authFlow.body.expires_in * 1000 + new Date().getTime();
 
         // Provide the Spotify library with the tokens
         this.api.setAccessToken(this.auth.access_token);
@@ -132,10 +181,7 @@ class Spotify {
         this.consoleInfo("Access Token:", this.auth.access_token);
         this.consoleInfo("Refresh Token:", this.auth.refresh_token);
 
-        return {
-            access_token: this.auth.access_token,
-            refresh_token: this.auth.refresh_token
-        };
+        return this.auth;
     }
 
     async search(terms, types, skip = 0, limit = 10) {

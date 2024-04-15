@@ -23,7 +23,32 @@ app.listen(port, () => {
 });
 
 app.get("/", async (req, res) => {
-    if (spotify.isAuthTokenValid() === false) {
+    const renderPlaybackState = () => {
+        spotify.getPlaybackState()
+            .then(state => {
+                if (state.body) {
+                    state = state.body;
+                }
+                state.show_playback_controls = process.env.SHOW_PLAYBACK_CONTROLS === "true";
+                res.render("playing", state);
+            })
+    }
+
+    if (spotify.api === undefined) {
+        spotify.initializeTokensFromFile()
+            .then(() => spotify.resetWebsocket()
+                    .then(() => spotify._initWebsocket())
+                    .then(() => spotify.initialized())
+                    .then(() => renderPlaybackState())
+                    .catch(err => res.status(500).send({error: err.message}))
+                ,
+                // failed initializeTokensFromFile()
+                err => {
+                    spotify.consoleError("Failed to initialize tokens.", err);
+                    res.redirect("/tokens");
+                })
+    }
+    else if (spotify.isAuthTokenValid() === false) {
         spotify.refreshAuthToken()
             .catch(err => {
                 spotify.consoleError("Failed to refresh auth token.", err);
@@ -38,14 +63,7 @@ app.get("/", async (req, res) => {
             });
     }
     else {
-        spotify.getPlaybackState()
-            .then(state => {
-                if (state.body) {
-                    state = state.body;
-                }
-                state.show_playback_controls = process.env.SHOW_PLAYBACK_CONTROLS === "true";
-                res.render("playing", state);
-            })
+        renderPlaybackState();
     }
 });
 
