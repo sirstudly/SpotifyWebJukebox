@@ -37,7 +37,7 @@ app.get("/", async (req, res) => {
     if (spotify.api === undefined) {
         spotify.initializeTokensFromFile()
             .then(() => spotify.resetWebsocket()
-                    .then(() => spotify._initWebsocket())
+                    .then(() => spotify.initWebsocket())
                     .then(() => spotify.initialized())
                     .then(() => renderPlaybackState())
                     .catch(err => res.status(500).send({error: err.message}))
@@ -96,7 +96,7 @@ app.post('/save-cookies', (request, response) => {
     if (request.body && request.body.data) {
         spotify.refreshWebAuthToken(request.body.data)
             .then(() => spotify.resetWebsocket())
-            .then(() => spotify._initWebsocket())
+            .then(() => spotify.initWebsocket())
             // Perform other start-up tasks, now that we have access to the api
             .then(() => spotify.initialized())
             .then(() => response.status(200).send({status: "OK"}))
@@ -119,9 +119,23 @@ app.get("/search-all", async (req, res) => {
 });
 
 app.get("/now-playing", async (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.status(200).send(spotify.getStatus());
+    const nowPlaying = () => {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.status(200).send(spotify.getStatus());
+    }
+    // in case we we've just started up and the api hasn't been initialized yet...
+    if (spotify.api === undefined) {
+        spotify.initializeTokensFromFile()
+            .then(() => spotify.resetWebsocket())
+            .then(() => spotify.initWebsocket())
+            .then(() => spotify.initialized())
+            .then(() => nowPlaying())
+            .catch(err => res.status(500).send({error: err.message}))
+    }
+    else {
+        nowPlaying();
+    }
 });
 
 app.get("/get-devices", async (req, res) => {

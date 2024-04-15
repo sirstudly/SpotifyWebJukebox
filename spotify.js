@@ -598,7 +598,7 @@ class Spotify {
         return Promise.resolve("OK");
     }
 
-    async _initWebsocket() {
+    async initWebsocket() {
         this.consoleInfo("WS: Initializing websocket to Spotify.");
         if (!this.isWebAuthTokenValid()) {
             await this.refreshWebAuthToken();
@@ -623,7 +623,7 @@ class Spotify {
             this.consoleInfo("WS: Disconnected!");
             clearInterval(this.ws.interval);
             this.sleep(2000)
-                .then(() => this._initWebsocket()) // keepalive!
+                .then(() => this.initWebsocket()) // keepalive!
                 .catch(e => {
                     this.consoleError("Failed to reinitialize web socket: ", e);
                     this.ws.onclose(); // retry indefinitely
