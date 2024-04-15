@@ -2,6 +2,7 @@ ErrorDocument 404 /404.php
 ErrorDocument 403 /403.php
 
 RedirectMatch 403 /.env
+RedirectMatch 403 /tokens.json
 
 # node_modules
 RedirectMatch 403 /node_modules(/|$)
