@@ -385,7 +385,7 @@
                             &times;
                         </button>
                     </div>
-                    <button type="button" @click="doSearch('track')" class="ml-1 inline-block rounded bg-indigo-600 px-6 pb-2 pt-2.5 text-xs font-medium uppercase leading-normal text-white transition duration-150 ease-in-out hover:bg-indigo-800 focus:outline-none focus:ring-0"
+                    <button type="button" id="btn-track-search" @click="doSearch('track')" class="ml-1 inline-block rounded bg-indigo-600 px-6 pb-2 pt-2.5 text-xs font-medium uppercase leading-normal text-white transition duration-150 ease-in-out hover:bg-indigo-800 focus:outline-none focus:ring-0"
                             :class="[ isLoading ? 'opacity-50 cursor-not-allowed' : 'active:bg-primary-700 hover:bg-primary-600' ]" :disabled="isLoading"
                             data-twe-ripple-init data-twe-ripple-color="light">
                         Search
@@ -646,21 +646,31 @@
         }
     }
 
-    const input = document.querySelector(".clear-input")
+    // handle search input field events: (clearing, enter key pressed, ...)
+    const input = document.querySelector("input[name='spotifySearchInput']");
+    const clearInput = document.querySelector(".clear-input")
     const clearButton = document.querySelector(".clear-input-button")
 
+    // Execute when the user presses the enter key on the keyboard
+    input.addEventListener("keypress", (ev) => {
+        if (ev.key === "Enter") {
+            ev.preventDefault();
+            document.querySelector("#btn-track-search").click();
+        }
+    });
+
     const handleInputChange = (e) => {
-        if (e.target.value && !input.classList.contains("clear-input--touched")) {
-            input.classList.add("clear-input--touched")
+        if (e.target.value && !clearInput.classList.contains("clear-input--touched")) {
+            clearInput.classList.add("clear-input--touched")
         } else if (!e.target.value && input.classList.contains("clear-input--touched")) {
-            input.classList.remove("clear-input--touched")
+            clearInput.classList.remove("clear-input--touched")
         }
     }
 
     const handleButtonClick = (e) => {
-        input.value = ''
-        input.focus()
-        input.classList.remove("clear-input--touched")
+        clearInput.value = ''
+        clearInput.focus()
+        clearInput.classList.remove("clear-input--touched")
     }
 
     clearButton.addEventListener("click", handleButtonClick)
