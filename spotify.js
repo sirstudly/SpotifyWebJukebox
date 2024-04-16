@@ -697,15 +697,9 @@ class Spotify {
      * @private
      */
     async _updateNowPlaying(playerState) {
-        if(playerState && playerState.track && playerState.next_tracks) {
-            // for efficiency, get all track info in one request
-            let trackIds = [playerState.track.uri];
-            trackIds.push(...playerState.next_tracks
-                .filter(t => t.metadata && t.metadata.is_queued == 'true')
-                .map(t => t.uri));
-            trackIds = trackIds.slice(0, 50) // API allows for max of 50
-                .map(uri => uri.substring(uri.lastIndexOf(":") + 1));
-            const tracks = await this.getTracks(trackIds);
+        if (playerState && playerState.track && playerState.next_tracks) {
+            const trackDict = []; // create a track dictionary keyed on uri
+            playerState.next_tracks.forEach(t => trackDict[t.uri] = t);
             const getTrackInfo = (track) => {
                 return {
                     id: track.id,
@@ -716,19 +710,38 @@ class Spotify {
                         id: track.album.id,
                         images: track.album.images,
                         name: track.album.name
-                    }
+                    },
+                    is_queued: trackDict[track.uri]?.metadata?.is_queued == 'true'
                 }
             };
+            // retrieve all the track info in one api request for efficiency
+            let nextTracks = await this.getTracks([
+                playerState.track.uri.substring(playerState.track.uri.lastIndexOf(":") + 1),
+                ...playerState.next_tracks
+                    .filter(t => t.uri.indexOf("spotify:track:") >= 0)
+                    .slice(0, 49) // API allows for max of 50
+                    .map(t => t.uri.substring(t.uri.lastIndexOf(":") + 1))]);
+            // now strip out only the data that we need
+            nextTracks = nextTracks.map(t => getTrackInfo(t));
+            const playlist_context = await this._getCurrentContext(playerState.context_uri);
             this.nowPlaying = {
                 last_updated: Date.now(), // FIXME: this is duplicated with timestamp, do we need both?
                 timestamp: parseInt(playerState.timestamp),
                 is_playing: !playerState.is_paused,
                 progress_ms: parseInt(playerState.position_as_of_timestamp),
                 duration_ms: parseInt(playerState.duration),
-                now_playing: getTrackInfo(tracks[0]),
-                next_track: playerState.next_tracks ? getTrackInfo(await this.getTrackByURI(playerState.next_tracks[0].uri)) : null,
-                queued_tracks: tracks.slice(1).map(t => getTrackInfo(t)),
-                context: await this._getCurrentContext(playerState.context_uri)
+                now_playing: nextTracks[0],
+                next_track: nextTracks[1],
+                queued_tracks: nextTracks.slice(1).filter(t => t.is_queued), // show all queued tracks
+                playlist_tracks: nextTracks.slice(1).filter(t => !t.is_queued).slice(0, 20), // show max 20 playlist tracks
+                context: playlist_context,
+                context_title: playlist_context.name
+                    + (playlist_context.type == "playlist" ? " Playlist" : "")
+                    + (playlist_context.type == "playlist radio" ? " Playlist Radio" : "")
+                    + (playlist_context.type == "album" ? " by " + playlist_context.artists : "")
+                    + (playlist_context.type == "track radio" ? " Track Radio" : "")
+                    + (playlist_context.type == "album radio" ? " Album Radio" : "")
+                    + (playlist_context.type == "artist radio" ? " Radio" : "")
             };
             this.consoleInfo("Now Playing:", this.nowPlaying);
         }

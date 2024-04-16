@@ -45,7 +45,7 @@ v1.0
 
 ## **Upcoming changes**
 
-- [ ] Show more than one song in the "Up next" list
+- [X] Show more than one song in the "Up next" list
 - [ ] Show more than 20 tracks when searching 
 - [ ] Setup WSS server and push out notifications rather than poll every second
 - [X] Persist auth tokens somewhere so it will survive a server restart
