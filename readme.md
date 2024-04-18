@@ -36,6 +36,11 @@ v1.1
 - Listen to WSS change notifications so we don't need to poll Spotify servers every second
 - Removed Spotify SDK from front-end client
 - Streamlined token retrieval on startup
+- Show more than one song in the "Up next" list
+- Persist auth tokens so it will survive a server restart
+- Default to currently active device (otherwise use preferred device)
+- Prevent duplicate songs from being queued
+- Find a way to uniquely identify users so they can be blacklisted
 
 v1.0
 - Initial version forked from NowPlaying repo
@@ -45,15 +50,11 @@ v1.0
 
 ## **Upcoming changes**
 
-- [X] Show more than one song in the "Up next" list
 - [ ] Show more than 20 tracks when searching 
 - [ ] Setup WSS server and push out notifications rather than poll every second
-- [X] Persist auth tokens somewhere so it will survive a server restart
-- [X] Default to currently active device (otherwise use preferred device)
-- [X] Prevent duplicate songs from being queued
 - [ ] Prevent songs matching keywords from being queued, eg. "farts"
-- [X] Find a way to uniquely identify users so they can be blacklisted
 - [ ] Implement blacklist by sessionID
+- [ ] Show volume slider on overlay
 
 ## **NowPlaying Changelog**
 

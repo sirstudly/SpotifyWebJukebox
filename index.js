@@ -36,7 +36,7 @@ app.get("/", async (req, res) => {
                 if (state.body) {
                     state = state.body;
                 }
-                state.show_playback_controls = process.env.SHOW_PLAYBACK_CONTROLS === "true";
+                state.show_playback_controls = process.env.SHOW_PLAYBACK_CONTROLS ?? "true";
                 res.render("playing", state);
             })
     }
