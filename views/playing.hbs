@@ -208,7 +208,7 @@
         clicksRequired: 5,
         clickCount: 0,
         handleMouseClick(ev) {
-            if (this.showPlaybackControls == 'hidden' && ev.clientX < 50 && ev.clientY < 50) {
+            if (this.showPlaybackControls == 'hidden' && ev.clientX < 100 && ev.clientY < 100) {
                 if (++this.clickCount >= this.clicksRequired) {
                     this.showPlaybackControls = 'true';
                 }
