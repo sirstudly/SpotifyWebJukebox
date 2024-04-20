@@ -230,6 +230,15 @@ app.get("/prev-track", async (req, res) => {
         .catch(err => res.status(500).send({error: err.message}));
 });
 
+app.post('/set-volume', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: set volume=${req.body.data}`);
+    spotify.setVolume(req.body.data)
+        .then(() => res.status(200).send({status: "OK"}))
+        .catch(err => res.status(500).send({error: err.message}));
+});
+
 (async function initSpotify() {
     // await spotify.initializeAuthToken()
     //     .catch(e => console.error("Error during initialization: ", e));

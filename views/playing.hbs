@@ -167,6 +167,38 @@
         .flickity-prev-next-button:disabled {
             display: none;
         }
+
+        .volume-slider {
+            width: 80%;
+            height: 24px;
+        }
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 100%;
+            border-radius: 10px;
+            background: transparent;
+            outline: none;
+            opacity: 1;
+            -webkit-transition: 0.2s;
+            transition: opacity 0.2s;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ffffff !important;
+            cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ffffff !important;
+            cursor: pointer;
+        }
     </style>
 
     <!-- Font -->
@@ -181,7 +213,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tw-elements/dist/css/tw-elements.min.css"/>
 
     <script src="assets/js/scripts.js?v=20240229"></script>
-    <script src="assets/js/playing.js?v=20240229"></script>
+    <script src="assets/js/playing.js?v=20240419"></script>
 </head>
 <body
         x-data="{
@@ -291,6 +323,14 @@
                 <button class="px-3 py-1 active:scale-95 transition" @click="$store.webPlayback.nextTrack()">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-6 w-6" fill="currentColor"><path d="M16,18H18V6H16M6,18L14.5,12L6,6V18Z" /></svg>
                 </button>
+            </div>
+
+            <div x-cloak
+                 x-show="showPlaybackControls == 'true' && showOverlay"
+                 x-transition:enter.duration.100ms
+                 x-transition:leave.duration.150ms
+                 class="absolute -bottom-7 left-8 z-30 flex flex-row bg-black/20 border-2 border-white/60 text-white rounded-full backdrop-blur-lg volume-slider">
+                <input @change="$store.webPlayback.setVolume($event.target.value)" type="range" min="0" max="100" value="50" step="1" class="slider"/>
             </div>
         </div>
 
@@ -617,6 +657,10 @@
 
             previousTrack() {
                 Alpine.store('player').prevTrack();
+            },
+
+            setVolume(volume) {
+                Alpine.store('player').setVolume(volume);
             },
 
             init() {

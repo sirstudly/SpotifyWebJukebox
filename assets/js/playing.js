@@ -39,6 +39,14 @@ document.addEventListener('alpine:init', x => {
                 .then((res) => res.json());
         },
 
+        async setVolume(volume) {
+            return await fetch("/set-volume", {
+                method: "POST",
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({data: volume})
+            }).then((res) => res.json());
+        },
+
         handleChange(obj) {
             this.lastPlaybackObj = this.playbackObj;
             this.playbackObj = obj;

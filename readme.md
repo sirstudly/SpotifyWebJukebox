@@ -41,6 +41,7 @@ v1.1
 - Default to currently active device (otherwise use preferred device)
 - Prevent duplicate songs from being queued
 - Find a way to uniquely identify users so they can be blacklisted
+- Show volume slider on overlay
 
 v1.0
 - Initial version forked from NowPlaying repo
@@ -54,7 +55,6 @@ v1.0
 - [ ] Setup WSS server and push out notifications rather than poll every second
 - [ ] Prevent songs matching keywords from being queued, eg. "farts"
 - [ ] Implement blacklist by sessionID
-- [ ] Show volume slider on overlay
 
 ## **NowPlaying Changelog**
 
@@ -135,13 +135,9 @@ HTML, TailwindCSS, JS / AlpineJS, PHP
 - Chromecast integration
 - Analytics panel
 
-## **How to host this?**
-
-You can use XAMPP (multi-platform) or Wampserver (Windows only) but any webserver with PHP 7.0 or greater is good to use, with the `php-curl` module.
-
 **!!! If you are on Nginx you need to add this to your config, or else your .env will be exposed to the internet !!!**
 ```
-location /.env {
+location ~ /(\.env|tokens\.json) {
     allow [YourIP]; # Allow your IP if you want to, if not delete this line.
     deny all;
 }
