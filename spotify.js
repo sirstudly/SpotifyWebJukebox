@@ -680,10 +680,16 @@ class Spotify {
                 else {
                     // update what's currently playing based on the CHANGE event
                     if (payload.payloads) {
-                        payload.payloads.filter(p => p.update_reason === "DEVICE_STATE_CHANGED")
-                            .forEach(p => this._updateNowPlaying(p.cluster.player_state).catch(e => {
-                                this.consoleError("Failed to update now playing: ", e);
-                            }))
+                        payload.payloads
+                            .filter(p => p.update_reason === "DEVICE_STATE_CHANGED" || p.update_reason === "DEVICE_VOLUME_CHANGED")
+                            .forEach(p => {
+                                this._updateNowPlaying(p.cluster.player_state)
+                                    .then(() => {
+                                        this.nowPlaying.volume = Math.round(p.cluster.devices[p.cluster.active_device_id].volume / 65535 * 100);
+                                        this.consoleInfo("Set volume to ", this.nowPlaying.volume);
+                                    })
+                                    .catch(e => this.consoleError("Failed to update now playing: ", e))
+                            })
                     }
                 }
             }

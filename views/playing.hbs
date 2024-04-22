@@ -213,7 +213,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tw-elements/dist/css/tw-elements.min.css"/>
 
     <script src="assets/js/scripts.js?v=20240229"></script>
-    <script src="assets/js/playing.js?v=20240419"></script>
+    <script src="assets/js/playing.js?v=20240421"></script>
 </head>
 <body
         x-data="{
@@ -330,7 +330,9 @@
                  x-transition:enter.duration.100ms
                  x-transition:leave.duration.150ms
                  class="absolute -bottom-7 left-8 z-30 flex flex-row bg-black/20 border-2 border-white/60 text-white rounded-full backdrop-blur-lg volume-slider">
-                <input @change="$store.webPlayback.setVolume($event.target.value)" type="range" min="0" max="100" value="50" step="1" class="slider"/>
+                <input type="range" min="0" max="100" value="50" step="1" class="slider"
+                       x-model="$store.player.playbackObj.volume"
+                       @change="$store.webPlayback.setVolume($event.target.value)"/>
             </div>
         </div>
 

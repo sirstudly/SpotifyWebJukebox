@@ -11,6 +11,11 @@ document.addEventListener('alpine:init', x => {
 
         targetImg: 'assets/images/no_song.png',
 
+        // because there will always be a delay from when we submit the volume change request and when we get the event
+        // that the volume has changed, we'll keep the current volume for a few seconds after we submit the request
+        holdVolumeAt: 50,
+        holdVolumeUntil: 0,
+
         async pollingLoop() {
             setInterval(() => {
                 this.fetchState();
@@ -40,6 +45,8 @@ document.addEventListener('alpine:init', x => {
         },
 
         async setVolume(volume) {
+            this.holdVolumeAt = this.playbackObj.volume;
+            this.holdVolumeUntil = Date.now() + 5000; // keep this volume for the next 5 seconds
             return await fetch("/set-volume", {
                 method: "POST",
                 headers: {'Content-Type': 'application/json'},
@@ -48,6 +55,11 @@ document.addEventListener('alpine:init', x => {
         },
 
         handleChange(obj) {
+            // keep volume the same in case we're changing it ourselves
+            if (this.holdVolumeUntil > Date.now()) {
+                obj.volume = this.holdVolumeAt;
+            }
+
             this.lastPlaybackObj = this.playbackObj;
             this.playbackObj = obj;
 
