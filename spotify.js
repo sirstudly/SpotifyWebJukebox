@@ -12,7 +12,7 @@ dotenv.config();
 class Spotify {
 
     // (re)attempt a task, a given number of times
-    async runTask(task, limit = 2) {
+    async runTask(task, limit = 1) {
         return task().catch(async(e) => {
             this.consoleError(`Attempt failed, ${limit} tries remaining.`, e);
             if (e.message == "Unauthorized") {
@@ -23,6 +23,7 @@ class Spotify {
                 this.consoleError("Too many attempts. Giving up.");
                 throw e;
             }
+            await this.sleep(2000);
             return this.runTask(task, limit - 1);
         })
     }

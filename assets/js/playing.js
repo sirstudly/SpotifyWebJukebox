@@ -16,6 +16,17 @@ document.addEventListener('alpine:init', x => {
         holdVolumeAt: 50,
         holdVolumeUntil: 0,
 
+        errorMessage: null,
+        errorTimeout: null,
+
+        setErrorMessage(message) {
+            this.errorMessage = message;
+            window.clearTimeout(this.errorTimeout);
+            this.errorTimeout = setTimeout(() => {
+                this.errorMessage = null
+            }, 10000);
+        },
+
         async pollingLoop() {
             setInterval(() => {
                 this.fetchState();
@@ -31,17 +42,17 @@ document.addEventListener('alpine:init', x => {
 
         async nextTrack() {
             return await fetch("/next-track")
-                .then((res) => res.json());
+                .then(resp => this.handleResponse(resp));
         },
 
         async prevTrack() {
             return await fetch("/prev-track")
-                .then((res) => res.json());
+                .then(resp => this.handleResponse(resp));
         },
 
         async togglePlay() {
             return await fetch("/toggle-play")
-                .then((res) => res.json());
+                .then(resp => this.handleResponse(resp));
         },
 
         async setVolume(volume) {
@@ -51,7 +62,17 @@ document.addEventListener('alpine:init', x => {
                 method: "POST",
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({data: volume})
-            }).then((res) => res.json());
+            }).then(resp => this.handleResponse(resp));
+        },
+
+        async handleResponse(resp) {
+            if (!resp.ok) {
+                resp.json().then(r => this.setErrorMessage("Computer says no." + (r.error ? " " + r.error : "")))
+                    .catch(err => this.setErrorMessage("Computer says no. " + err));
+                return Promise.resolve("OK")
+            }
+            return resp.json()
+                .catch(err => this.setErrorMessage("Computer says no. " + err))
         },
 
         handleChange(obj) {

@@ -213,7 +213,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tw-elements/dist/css/tw-elements.min.css"/>
 
     <script src="assets/js/scripts.js?v=20240229"></script>
-    <script src="assets/js/playing.js?v=20240421"></script>
+    <script src="assets/js/playing.js?v=20240422"></script>
 </head>
 <body
         x-data="{
@@ -297,6 +297,16 @@
                     :src="$store.player.targetImg ?? 'assets/images/no_song.png'"
                     class="rounded-2xl h-auto w-full custom-img-shadow"
             >
+
+            <div
+                    x-cloak
+                    x-show="$store.player.errorMessage"
+                    x-text="$store.player.errorMessage"
+                    x-transition:enter.duration.100ms
+                    x-transition:leave.duration.150ms
+                    class="absolute top-24 left-6 z-30 w-auto pl-4 flex flex-row bg-black/20 border-2 border-white/60 text-white rounded-full backdrop-blur-lg"
+            >
+            </div>
 
             <button
                     x-cloak
