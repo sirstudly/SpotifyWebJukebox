@@ -8,6 +8,7 @@ document.addEventListener('alpine:init', x => {
 
         playbackObj: {},
         lastPlaybackObj: {},
+        currentSongLyrics: {},
 
         targetImg: 'assets/images/no_song.png',
 
@@ -75,6 +76,31 @@ document.addEventListener('alpine:init', x => {
                 .catch(err => this.setErrorMessage("Computer says no. " + err))
         },
 
+        // sets the 'timeframe' attribute on each line of the lyrics
+        updateSongLyricsTimings() {
+            let lastStartTime = 0;
+            for (let i = 0; i < this.currentSongLyrics?.lines?.length; i++) {
+                let line = this.currentSongLyrics.lines[i];
+                if (this.playbackObj.progress_ms > line.startTimeMs) {
+                    this.currentSongLyrics.lines[i].timeframe = 'past';
+                }
+                else {
+                    // if this is the first lyric not in the past, we're in the present
+                    if (lastStartTime == 0) {
+                        if (i > 0) {
+                            // shift back a line because we actually want to highlight the line currently being sung
+                            this.currentSongLyrics.lines[i - 1].timeframe = 'present';
+                        }
+                        lastStartTime = line.startTimeMs;
+                    }
+                    else {
+                        this.currentSongLyrics.lines[i].timeframe = line.startTimeMs == lastStartTime
+                            ? 'present' : 'future';
+                    }
+                }
+            }
+        },
+
         handleChange(obj) {
             // keep volume the same in case we're changing it ourselves
             if (this.holdVolumeUntil > Date.now()) {
@@ -86,6 +112,24 @@ document.addEventListener('alpine:init', x => {
 
             if (this.playbackObj.now_playing) {
                 document.title = `Playing ${this.playbackObj.now_playing?.song_title} - ${this.playbackObj.now_playing?.artist}`;
+
+                // if we've switched songs, update lyrics for this song
+                if (this.lastPlaybackObj?.now_playing?.id != this.playbackObj.now_playing.id) {
+                    fetch("/get-lyrics")
+                        .then(res => res.json().then(r => {
+                            if (res.ok) {
+                                this.currentSongLyrics = r.lyrics;
+                            }
+                            else {
+                                console.log("Failed to retrieve lyrics", r);
+                                this.currentSongLyrics = {};
+                            }
+                        }))
+                        .catch(err => {
+                            console.log("Failed to retrieve lyrics", err);
+                            this.currentSongLyrics = {};
+                        });
+                }
             }
 
             // recalculate progress_ms based on the timestamp and the current time

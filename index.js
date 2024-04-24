@@ -203,6 +203,14 @@ app.get("/get-queue", async (req, res) => {
         .catch(err => res.status(500).send({error: err.message}));
 });
 
+app.get("/get-lyrics", async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.getLyrics()
+        .then(state => res.status(200).send(state))
+        .catch(err => res.status(500).send({error: err.message}));
+});
+
 app.get("/toggle-play", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');

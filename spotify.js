@@ -5,7 +5,7 @@ const agent = require('superagent').agent();
 const dotenv = require("dotenv");
 const crypto = require("crypto");
 const fs = require('fs')
-const USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/78.0.3904.97 Safari/537.36';
+const USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0';
 const TOKENS_FILE = 'tokens.json';
 dotenv.config();
 
@@ -317,6 +317,22 @@ class Spotify {
         return await this.runTask(() => {
             return this.api.getMyCurrentPlaybackState();
         });
+    }
+
+    async getLyrics() {
+        if (!this.isWebAuthTokenValid()) {
+            await this.refreshWebAuthToken();
+        }
+        return agent.get(`https://spclient.wg.spotify.com/color-lyrics/v2/track/${this.nowPlaying.now_playing.id}?format=json&vocalRemoval=false`)
+            .auth(this.web_auth.access_token, {type: 'bearer'})
+            .set('Content-Type', 'application/json')
+            .set('accept', 'application/json')
+            .set('User-Agent', USER_AGENT)
+            .set('app-platform', 'WebPlayer')
+            // .use(superdebug.default(console.info))
+            .buffer(true)
+            .send()
+            .then(resp => JSON.parse(resp.text));
     }
 
     async getVolume() {
@@ -687,7 +703,7 @@ class Spotify {
                                 this._updateNowPlaying(p.cluster.player_state)
                                     .then(() => {
                                         this.nowPlaying.volume = Math.round(p.cluster.devices[p.cluster.active_device_id].volume / 65535 * 100);
-                                        this.consoleInfo("Set volume to ", this.nowPlaying.volume);
+                                        this.consoleInfo("Volume set to ", this.nowPlaying.volume);
                                     })
                                     .catch(e => this.consoleError("Failed to update now playing: ", e))
                             })

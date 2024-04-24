@@ -42,6 +42,7 @@ v1.1
 - Prevent duplicate songs from being queued
 - Find a way to uniquely identify users so they can be blacklisted
 - Show volume slider on overlay
+- Show lyrics (in dialog)
 
 v1.0
 - Initial version forked from NowPlaying repo
