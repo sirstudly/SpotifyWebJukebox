@@ -510,7 +510,10 @@
                      x-transition:leave.duration.500ms>
                     <span x-text="message" :class="isError ? 'text-red-500' : 'text-yellow-300'"></span>
                 </div>
-                <div x-cloak="searchResults" x-show="searchResults" class="carousel js-flickity" data-flickity='{ "draggable": true, "pageDots": false }'>
+                <div x-show="searchResults && !searchResults?.tracks?.items?.length">
+                    <div class="text-yellow-300">No Results found.</div>
+                </div>
+                <div x-show="searchResults?.tracks?.items?.length > 0" class="carousel js-flickity" data-flickity='{ "draggable": true, "pageDots": false }'>
                         <template x-for="track in searchResults?.tracks?.items" :key="track.uri">
                             <div class="carousel-cell">
                                 <div class="text-sm justify-center flex flex-col">
@@ -756,11 +759,9 @@
                 if (this.spotifySearchInput.length) {
                     fetch(`/search-all?types=${searchType}&terms=${encodeURIComponent(this.spotifySearchInput)}`)
                             .then(res => res.json())
-                            .then(data => {
-                                this.isLoading = false;
-                                this.searchResults = data;
-                            })
+                            .then(data => this.searchResults = data)
                             .catch(err => this.setMessage("Something wonky happened. Try again later. " + err.message))
+                            .finally(() => this.isLoading = false)
                 }
                 else {
                     this.isLoading = false;
@@ -773,14 +774,16 @@
 
                     // remove the template elements from the end of the carousel
                     for (let carouselLen = $('.carousel').data('flickity').cells.length;
-                         $('.carousel').data('flickity').cells[carouselLen - 1].element.tagName == 'TEMPLATE';
+                         carouselLen > 0 && $('.carousel').data('flickity').cells[carouselLen - 1].element.tagName == 'TEMPLATE';
                          carouselLen--) {
                         $('.carousel').data('flickity').cells.pop();
                     }
 
                     // remove the template elements from the front of the carousel
-                    while ($('.carousel').data('flickity').cells[0].element.tagName == 'TEMPLATE') {
-                        $('.carousel').data('flickity').cells.shift();
+                    if ($('.carousel').data('flickity').cells.length > 0) {
+                        while ($('.carousel').data('flickity').cells[0].element.tagName == 'TEMPLATE') {
+                            $('.carousel').data('flickity').cells.shift();
+                        }
                     }
 
                     $('.carousel')
