@@ -126,7 +126,7 @@ app.get("/search-all", async (req, res) => {
     spotify.consoleInfo( `[${req.sessionID}]: search types=${req.query.types} terms=${req.query.terms}`);
     const types = req.query.types ? req.query.types.split(',') : ['track', 'album', 'artist', 'playlist'];
     const skip = req.query.skip ? parseInt(req.query.skip) : 0;
-    const limit = req.query.limit ? parseInt(req.query.limit) : 20;
+    const limit = req.query.limit ? parseInt(req.query.limit) : 40;
     spotify.search(req.query.terms, types, skip, limit)
         .then(state => res.status(200).send(state))
         .catch(err => res.status(500).send({error: err.message}));
