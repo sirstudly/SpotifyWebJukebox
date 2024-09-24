@@ -821,6 +821,26 @@ class Spotify {
         }
     }
 
+    setArtistRadio(artistId) {
+        return this.runTask(() => this._setContextRadio(() => this.api.getArtist(artistId)));
+    }
+
+    setAlbumRadio(albumId) {
+        return this.runTask(() => this._setContextRadio(() => this.api.getAlbum(albumId)));
+    }
+
+    setPlaylistRadio(playlistId) {
+        return this.runTask(() => this._setContextRadio(() => this.api.getPlaylist(playlistId)));
+    }
+
+    async _setContextRadio(fnRetrieveitem) {
+        await this._verifyPlaybackState();
+
+        const item = await fnRetrieveitem();
+        this.consoleInfo(`Attempting to set ${item.body.name} ${item.body.type} radio.`);
+        return await this.play(`spotify:radio:${item.body.type}:${item.body.id}`);
+    }
+
     /**
      * Returns the currently playing context (e.g. album, track, playlist...)
      * @param contextUri spotify context URI
