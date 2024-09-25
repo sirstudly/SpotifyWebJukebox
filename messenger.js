@@ -311,7 +311,7 @@ class Messenger {
                 else if (result.tracks.items.length > 0) {
                     // If there are enough remaining results, we can give the user
                     // a 'More' button to pull further results
-                    const remainingResults = result.total - limit - skip;
+                    const remainingResults = result.tracks.total - limit - skip;
                     const showMoreButton = (remainingResults > 0);
 
                     // Sort the results by popularity
