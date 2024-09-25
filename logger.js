@@ -18,7 +18,8 @@ const infoTransport = new transports.DailyRotateFile({
     filename: 'info-%DATE%.log',
     datePattern: 'YYYY-MM-DD',
     zippedArchive: false,
-    frequency: '1d'
+    frequency: '1d',
+    maxFiles: '30d'
 });
 
 const infoLogger = createLogger({
@@ -36,7 +37,7 @@ const errorTransport = new transports.DailyRotateFile({
     datePattern: 'YYYY-MM-DD',
     zippedArchive: false,
     frequency: '1d',
-    maxFiles: '30d'
+    maxFiles: '90d'
 });
 
 const errorLogger = createLogger({
