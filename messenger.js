@@ -888,7 +888,7 @@ class Messenger {
             else {
                 await spotify.setVolume(volume)
                     .then(resp => {
-                        this.consoleInfo("Volume response: %s", resp);
+                        this.consoleInfo("Volume response:", resp);
                         this.sendMessage(sender, {text: "Volume set."});
                     })
                     .catch(error => {
@@ -1092,11 +1092,11 @@ class Messenger {
     }
 
     consoleInfo(...args) {
-        infoLog.info(...args);
+        infoLog.info(args.map(x => typeof x !== 'string' ? JSON.stringify(x) : x).join(' '));
     }
 
     consoleError(...args) {
-        errorLog.error(...args);
+        errorLog.error(args.map(x => typeof x !== 'string' ? JSON.stringify(x) : x).join(' '));
     }
 }
 

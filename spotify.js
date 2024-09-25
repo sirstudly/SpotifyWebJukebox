@@ -5,6 +5,8 @@ const agent = require('superagent').agent();
 const dotenv = require("dotenv");
 const crypto = require("crypto");
 const fs = require('fs')
+const errorLog = require('./logger').errorlogger;
+const infoLog = require('./logger').infoLogger;
 const USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0';
 const TOKENS_FILE = 'tokens.json';
 dotenv.config();
@@ -893,15 +895,11 @@ class Spotify {
     }
 
     consoleInfo(...args) {
-        const arg_copy = [...args];
-        arg_copy.splice(0, 0, new Date().toLocaleString())
-        console.info(...arg_copy);
+        infoLog.info(args.map(x => typeof x !== 'string' ? JSON.stringify(x) : x).join(' '));
     }
 
     consoleError(...args) {
-        const arg_copy = [...args];
-        arg_copy.splice(0, 0, new Date().toLocaleString())
-        console.error(...arg_copy);
+        errorLog.error(args.map(x => typeof x !== 'string' ? JSON.stringify(x) : x).join(' '));
     }
 }
 
