@@ -510,47 +510,47 @@
                      x-transition:leave.duration.500ms>
                     <span x-text="message" :class="isError ? 'text-red-500' : 'text-yellow-300'"></span>
                 </div>
-                <div x-show="searchResults && !searchResults?.tracks?.items?.length">
+                <div x-show="searchResults && !searchResults?.tracks?.items?.length && !searchResults?.artists?.items?.length && !searchResults?.albums?.items?.length && !searchResults?.playlists?.items?.length">
                     <div class="text-yellow-300">No Results found.</div>
                 </div>
-                <div x-show="searchResults?.tracks?.items?.length > 0" class="carousel js-flickity" data-flickity='{ "draggable": true, "pageDots": false }'>
-                        <template x-for="track in searchResults?.tracks?.items" :key="track.uri">
-                            <div class="carousel-cell">
-                                <div class="text-sm justify-center flex flex-col">
-                                    <template x-if="track.album.images.length > 1">
-                                        <img :src="track.album.images[1].url">
-                                    </template>
-                                    <template x-if="track.album.images.length == 1">
-                                        <img :src="track.album.images[0].url">
-                                    </template>
-                                    <h3 class="text-white text-base font-bold leading-none mb-2" x-text="track.name"></h3>
-                                    <h4 class="text-slate-300 text-sm font-bold leading-none mb-2" x-text="track.album.artists.map(artist => artist.name).join(',')"></h4>
-                                    <div class="flex flex-row justify-center">
-                                        <button @click="queueTrack(track.uri)" :disabled="isLoading" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Queue Track</button>
-                                    </div>
+                <div x-show="searchResults?.tracks?.items?.length || searchResults?.artists?.items?.length || searchResults?.albums?.items?.length || searchResults?.playlists?.items?.length" class="carousel js-flickity" data-flickity='{ "draggable": true, "pageDots": false }'>
+                    <template x-for="track in searchResults?.tracks?.items" :key="track.uri">
+                        <div class="carousel-cell">
+                            <div class="text-sm justify-center flex flex-col">
+                                <template x-if="track.album.images.length > 1">
+                                    <img :src="track.album.images[1].url">
+                                </template>
+                                <template x-if="track.album.images.length == 1">
+                                    <img :src="track.album.images[0].url">
+                                </template>
+                                <h3 class="text-white text-base font-bold leading-none mb-2" x-text="track.name"></h3>
+                                <h4 class="text-slate-300 text-sm font-bold leading-none mb-2" x-text="track.album.artists.map(artist => artist.name).join(',')"></h4>
+                                <div class="flex flex-row justify-center">
+                                    <button @click="queueTrack(track.uri)" :disabled="isLoading" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Queue Track</button>
                                 </div>
                             </div>
-                        </template>
+                        </div>
+                    </template>
 
-                        <!------ ARTIST SEARCH RESULTS ------->
-                        <template x-for="artist in searchResults?.artists?.items" :key="artist.uri">
-                            <div class="carousel-cell">
-                                <div class="text-sm justify-center flex flex-col">
-                                    <template x-if="artist.images.length > 1">
-                                        <img :src="artist.images[1].url">
-                                    </template>
-                                    <template x-if="artist.images.length == 1">
-                                        <img :src="artist.images[0].url">
-                                    </template>
-                                    <h3 class="text-white text-base font-bold leading-none mb-2" x-text="artist.name"></h3>
-                                    <div class="flex flex-row justify-center my-1">
-                                        <button @click="playItem('artist', artist.name, artist.uri)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Play Artist</button>
-                                    </div>
-                                    <div class="flex flex-row justify-center my-1">
-                                        <button @click="playRadio('artist', artist.name, artist.id)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Play Artist Radio</button>
-                                    </div>
+                    <!------ ARTIST SEARCH RESULTS ------->
+                    <template x-for="artist in searchResults?.artists?.items" :key="artist.uri">
+                        <div class="carousel-cell">
+                            <div class="text-sm justify-center flex flex-col">
+                                <template x-if="artist.images.length > 1">
+                                    <img :src="artist.images[1].url">
+                                </template>
+                                <template x-if="artist.images.length == 1">
+                                    <img :src="artist.images[0].url">
+                                </template>
+                                <h3 class="text-white text-base font-bold leading-none mb-2" x-text="artist.name"></h3>
+                                <div class="flex flex-row justify-center my-1">
+                                    <button @click="playItem('artist', artist.name, artist.uri)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Play Artist</button>
+                                </div>
+                                <div class="flex flex-row justify-center my-1">
+                                    <button @click="playRadio('artist', artist.name, artist.id)" class="flex bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">Play Artist Radio</button>
                                 </div>
                             </div>
+                        </div>
                     </template>
 
                     <!------ ALBUM SEARCH RESULTS ------->
