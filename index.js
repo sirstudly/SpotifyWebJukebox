@@ -309,19 +309,6 @@ app.post('/set-volume', (req, res) => {
         .catch(err => res.status(500).send({error: err.message}));
 });
 
-app.get('/reload-config', async (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    spotify.consoleInfo( `[${req.sessionID}]: reload-config`);
-    const result = dotenv.config();
-    if (result.error) {
-        res.status(500).send({error: result.error})
-    }
-    else {
-        res.status(200).send({status: "OK"})
-    }
-});
-
 (async function initSpotify() {
     // await spotify.initializeAuthToken()
     //     .catch(e => console.error("Error during initialization: ", e));
