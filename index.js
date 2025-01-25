@@ -225,18 +225,28 @@ app.get("/queue-track", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
     spotify.consoleInfo( `[${req.sessionID}]: queueing track ${req.query.trackUri}`);
-    spotify.queueTrack(req.query.trackUri)
-        .then(state => res.status(200).send(state))
-        .catch(err => res.status(500).send({error: err.message}));
+    if (process.env.DISABLED && 'true' === process.env.DISABLED.toLowerCase()) {
+        res.status(503).send({error: "This function is currently disabled."})
+    }
+    else {
+        spotify.queueTrack(req.query.trackUri)
+            .then(state => res.status(200).send(state))
+            .catch(err => res.status(500).send({error: err.message}));
+    }
 });
 
 app.get("/play", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
     spotify.consoleInfo( `[${req.sessionID}]: requested play ${req.query.contextUri}`);
-    spotify.play( req.query.contextUri )
-        .then(state => res.status(200).send(state))
-        .catch(err => res.status(500).send({error: err.message}));
+    if (process.env.DISABLED && 'true' === process.env.DISABLED.toLowerCase()) {
+        res.status(503).send({error: "This function is currently disabled."})
+    }
+    else {
+        spotify.play(req.query.contextUri)
+            .then(state => res.status(200).send(state))
+            .catch(err => res.status(500).send({error: err.message}));
+    }
 });
 
 app.get("/get-playback-state", async (req, res) => {
@@ -297,6 +307,19 @@ app.post('/set-volume', (req, res) => {
     spotify.setVolume(req.body.data)
         .then(() => res.status(200).send({status: "OK"}))
         .catch(err => res.status(500).send({error: err.message}));
+});
+
+app.get('reload-config', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    spotify.consoleInfo( `[${req.sessionID}]: reload-config`);
+    const result = dotenv.config();
+    if (result.error) {
+        res.status(500).send({error: result.error})
+    }
+    else {
+        res.status(200).send({status: "OK"})
+    }
 });
 
 (async function initSpotify() {

@@ -42,7 +42,7 @@ class Messenger {
             const command = event.message.text.toLowerCase().substr(1)
                 .split(/\s+/)
                 .filter(text => text.length);
-            if (command.length && false == this.isSenderOnBlacklist(event.sender.id)) {
+            if (command.length && false === this.isSenderOnBlacklist(event.sender.id) && false === this.isDisabled(event.sender.id)) {
                 switch (command[0]) {
                     case 'volume':
                         this.postVolume(event.sender.id, command.length == 1 ? null : command[1]);
@@ -115,7 +115,7 @@ class Messenger {
             case Commands.ADD_TRACK: {
                 // Add the track (contained in the payload) to the Spotify queue.
                 // Note: We created this payload data when we created the button in searchMusic()
-                if (this.isSenderOnBlacklist(event.sender.id)) {
+                if (this.isSenderOnBlacklist(event.sender.id) || this.isDisabled(event.sender.id)) {
                     break;
                 }
                 else if (this.isTrackQueued(payload.track)) {
@@ -178,28 +178,28 @@ class Messenger {
                 break;
             }
             case Commands.SET_PLAYLIST: {
-                if (this.isSenderOnBlacklist(event.sender.id)) {
+                if (this.isSenderOnBlacklist(event.sender.id) || this.isDisabled(event.sender.id)) {
                     break;
                 }
                 this.setPlaylist(event.sender.id, payload.playlist);
                 break;
             }
             case Commands.SET_PLAYLIST_RADIO: {
-                if (this.isSenderOnBlacklist(event.sender.id)) {
+                if (this.isSenderOnBlacklist(event.sender.id) || this.isDisabled(event.sender.id)) {
                     break;
                 }
                 this.setPlaylistRadio(event.sender.id, payload.playlist);
                 break;
             }
             case Commands.PLAY_ALBUM: {
-                if (this.isSenderOnBlacklist(event.sender.id)) {
+                if (this.isSenderOnBlacklist(event.sender.id) || this.isDisabled(event.sender.id)) {
                     break;
                 }
                 this.setAlbum(event.sender.id, payload.album);
                 break;
             }
             case Commands.PLAY_ALBUM_RADIO: {
-                if (this.isSenderOnBlacklist(event.sender.id)) {
+                if (this.isSenderOnBlacklist(event.sender.id) || this.isDisabled(event.sender.id)) {
                     break;
                 }
                 this.setAlbumRadio(event.sender.id, payload.album);
@@ -210,14 +210,14 @@ class Messenger {
                 break;
             }
             case Commands.PLAY_ARTIST: {
-                if (this.isSenderOnBlacklist(event.sender.id)) {
+                if (this.isSenderOnBlacklist(event.sender.id) || this.isDisabled(event.sender.id)) {
                     break;
                 }
                 this.setArtist(event.sender.id, payload.artist);
                 break;
             }
             case Commands.PLAY_ARTIST_RADIO: {
-                if (this.isSenderOnBlacklist(event.sender.id)) {
+                if (this.isSenderOnBlacklist(event.sender.id) || this.isDisabled(event.sender.id)) {
                     break;
                 }
                 this.setArtistRadio(event.sender.id, payload.artist);
@@ -233,6 +233,14 @@ class Messenger {
     isSenderOnBlacklist(sender) {
         if (process.env.USER_BLACKLIST && process.env.USER_BLACKLIST.includes(sender)) {
             this.sendMessage(sender, {text: "Yeah, nah... I don't think so. You're a bit of a twat."});
+            return true;
+        }
+        return false;
+    }
+
+    isDisabled(sender) {
+        if (process.env.DISABLED && 'true' === process.env.DISABLED.toLowerCase()) {
+            this.sendMessage(sender, {text: "Sorry. This function is currently disabled."});
             return true;
         }
         return false;
