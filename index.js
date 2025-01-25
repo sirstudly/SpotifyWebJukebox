@@ -309,7 +309,7 @@ app.post('/set-volume', (req, res) => {
         .catch(err => res.status(500).send({error: err.message}));
 });
 
-app.get('reload-config', (req, res) => {
+app.get('/reload-config', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
     spotify.consoleInfo( `[${req.sessionID}]: reload-config`);
