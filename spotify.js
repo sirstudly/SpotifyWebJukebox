@@ -193,6 +193,12 @@ class Spotify {
         }
         return this.runTask(async () => {
             const result = await this.api.search(terms, types, {offset: skip, limit: limit});
+
+            // 2025-02-02 spotify is being wonky and returning null items?!
+            if (result.body && result.body.playlists && result.body.playlists.items) {
+                result.body.playlists.items = result.body.playlists.items.filter(item => item != null);
+            }
+
             return result.body;
         });
     }

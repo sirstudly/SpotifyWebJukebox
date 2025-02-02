@@ -367,7 +367,7 @@ class Messenger {
                 }
             })
             .catch( err => {
-                this.consoleError("Error searching for " + terms, err);
+                errorLog.error("Error searching for " + terms, err);
                 this.sendMessage(sender, { text: "Oops.. Computer says no. Maybe try again later." });
             });
 
@@ -405,7 +405,7 @@ class Messenger {
                     }
                 }
             }).catch(err => {
-                this.consoleError("Error searching for " + terms, err);
+                errorLog.error("Error searching for " + terms, err);
                 this.sendMessage(sender, {text: "Oops.. Computer says no. Maybe try again later."});
             });
         }
