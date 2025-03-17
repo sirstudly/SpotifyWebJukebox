@@ -21,6 +21,7 @@
     "spotify-web-api-node": "^5.0.2",
     "superagent": "^8.1.2",
     "superagent-debugger": "^1.2.9",
+    "totp-generator": "^1.0.0",
     "websocket": "^1.0.35",
     "winston": "^3.14.2",
     "winston-daily-rotate-file": "^5.0.0"

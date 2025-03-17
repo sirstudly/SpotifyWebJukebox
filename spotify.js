@@ -5,6 +5,7 @@ const agent = require('superagent').agent();
 const dotenv = require("dotenv");
 const crypto = require("crypto");
 const fs = require('fs')
+const TOTP = require("totp-generator").TOTP;
 const errorLog = require('./logger').errorlogger;
 const infoLog = require('./logger').infoLogger;
 const USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0';
@@ -57,7 +58,8 @@ class Spotify {
             return Promise.reject("Missing web authorization cookie!");
         }
         this.consoleInfo("Attempting to retreive web auth token with sp_dc: " + sp_dc);
-        this.web_auth = await agent.get("https://open.spotify.com/get_access_token")
+        const access_token_url = await this.getAccessTokenUrl();
+        this.web_auth = await agent.get(access_token_url)
             .query({reason: "transport", productType: "web_player"})
             .set('Content-Type', 'application/json')
             .set('User-Agent', USER_AGENT)
@@ -66,6 +68,7 @@ class Spotify {
             .then(resp => {
                 // isAnonymous should be false (Spotify should be able to identify who's account it is)
                 if (resp.body.isAnonymous) {
+                    this.consoleError("Response:", JSON.stringify(resp.body));
                     throw new Error("Unable to retrieve access token");
                 }
                 return {
@@ -185,6 +188,65 @@ class Spotify {
         this.consoleInfo("Refresh Token:", this.auth.refresh_token);
 
         return this.auth;
+    }
+
+    // Taken from https://github.com/KRTirtho/spotube/issues/2494#issuecomment-2728511342
+    async getAccessTokenUrl() {
+
+        const secretSauce = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        const base32FromBytes = (e) => {
+            let t = 0;
+            let n = 0;
+            let r = "";
+            for (let i = 0; i < e.length; i++) {
+                n = n << 8 | e[i];
+                t += 8;
+                while (t >= 5) {
+                    r += secretSauce[n >>> t - 5 & 31];
+                    t -= 5;
+                }
+            }
+            if (t > 0) {
+                r += secretSauce[n << 5 - t & 31];
+            }
+            return r;
+        }
+
+        function cleanBuffer(e) {
+            e = e.replace(/ /g, "");
+            const t = new ArrayBuffer(e.length / 2);
+            const n = new Uint8Array(t);
+            for (let r = 0; r < e.length; r += 2) {
+                n[r / 2] = parseInt(e.substring(r, r + 2), 16);
+            }
+            return n;
+        };
+
+        const secretCipherBytes = [12, 56, 76, 33, 88, 44, 88, 33, 78, 78, 11, 66, 22, 22, 55, 69, 54]
+            .map((e, t) => e ^ t % 33 + 9)
+
+        const secretBytes = new Uint8Array(cleanBuffer(Buffer.from(
+            secretCipherBytes.join(""), "utf8").toString("hex")).buffer);
+
+        const secret = base32FromBytes(secretBytes);
+        const res = await fetch("https://open.spotify.com/server-time").then((e) => e.json())
+        const timestamp = res["serverTime"];
+
+        const totp = TOTP.generate(secret, {
+            algorithm: "SHA-1",
+            digits: 6,
+            period: 30,
+            timestamp: timestamp * 1000,
+        });
+
+        const currentTimestamp = Math.floor(Date.now() / 1000);
+
+        this.consoleInfo("secretCipherBytes:", secretCipherBytes);
+        this.consoleInfo("secretBytes:", secretBytes);
+        this.consoleInfo("secret:", secret);
+        const url = `https://open.spotify.com/get_access_token?reason=transport&productType=web_player&totp=${totp.otp}&totpVer=5&ts=${currentTimestamp}`;
+        this.consoleInfo("url:", url);
+        return url;
     }
 
     async search(terms, types, skip = 0, limit = 10) {
