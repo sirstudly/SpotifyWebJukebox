@@ -229,7 +229,7 @@ class Spotify {
             secretCipherBytes.join(""), "utf8").toString("hex")).buffer);
 
         const secret = base32FromBytes(secretBytes);
-        const res = await fetch("https://open.spotify.com/server-time").then((e) => e.json())
+        const res = await agent.get("https://open.spotify.com/server-time").then(resp => JSON.parse(resp.text))
         const timestamp = res["serverTime"];
 
         const totp = TOTP.generate(secret, {
