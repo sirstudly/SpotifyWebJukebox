@@ -71,7 +71,9 @@ class Spotify {
                     this.consoleError("Response:", JSON.stringify(resp.body));
                     throw new Error("Unable to retrieve access token");
                 }
+                this.consoleInfo("Response:", JSON.stringify(resp.body));
                 return {
+                    client_id: resp.body.clientId,
                     access_token: resp.body.accessToken,
                     expires_at: resp.body.accessTokenExpirationTimestampMs
                 }
@@ -671,15 +673,18 @@ class Spotify {
         if (!this.isWebAuthTokenValid()) {
             await this.refreshWebAuthToken();
         }
+        const clientToken = await this.getClientToken();
+        this.consoleInfo("Client token: ", clientToken);
         return agent.put(`https://gew-spclient.spotify.com/connect-state/v1/devices/hobs_${this.fakeDeviceId}`)
             .auth(this.web_auth.access_token, {type: 'bearer'})
             .set('Content-Type', 'application/json')
             .set('User-Agent', USER_AGENT)
             .set('X-Spotify-Connection-Id', this.spotifyConnectionId)
+            .set('Client-Token', clientToken.granted_token.token)
             .buffer(true) // because content-type isn't set in the response header, we need to get the raw text rather than the (parsed) body
             .send({
                 member_type: "CONNECT_STATE",
-                device: {device_info: {capabilities: {can_be_player: false, hidden: true}}}
+                device: {device_info: {capabilities: {can_be_player: false, hidden: true, needs_full_player_state: true}}}
             })
             .then(resp => {
                 this.consoleInfo("Notification registration response", resp);
@@ -693,6 +698,32 @@ class Spotify {
                     this.consoleError("Failed to register for notifications.", err);
                     throw err;
                 }
+            });
+    }
+
+    async getClientToken() {
+        return agent.post("https://clienttoken.spotify.com/v1/clienttoken")
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('User-Agent', USER_AGENT)
+            .send({
+                "client_data": {
+                    "client_version": "1.2.66.349.gb8b186bd",
+                    "client_id": this.web_auth.client_id,
+                    "js_sdk_data": {
+                        "device_brand": "Apple",
+                        "device_model": "unknown",
+                        "os": "macos",
+                        "os_version": "10.15.7",
+                        "device_id": this.fakeDeviceId,
+                        "device_type": "computer"
+                    }
+                }
+            })
+            .then(resp => JSON.parse(resp.text))
+            .catch(err => {
+                this.consoleError("Failed to get client token.", err);
+                throw err;
             });
     }
 
