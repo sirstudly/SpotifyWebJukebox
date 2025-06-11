@@ -192,7 +192,6 @@ class Spotify {
 
     // Taken from https://github.com/KRTirtho/spotube/issues/2494#issuecomment-2728511342
     async getAccessTokenUrl() {
-
         const secretSauce = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
         const base32FromBytes = (e) => {
             let t = 0;
@@ -229,22 +228,32 @@ class Spotify {
             secretCipherBytes.join(""), "utf8").toString("hex")).buffer);
 
         const secret = base32FromBytes(secretBytes);
-        const res = await agent.get("https://open.spotify.com/server-time").then(resp => JSON.parse(resp.text))
-        const timestamp = res["serverTime"];
 
-        const totp = TOTP.generate(secret, {
+        // See https://github.com/librespot-org/librespot/issues/1475#issuecomment-2961128642
+        const res = await agent.get("https://open.spotify.com/api/server-time").then(resp => JSON.parse(resp.text));
+        const serverTime = res["serverTime"];
+        const currentTimeMs = Date.now();
+        const currentTime = Math.floor(currentTimeMs / 1000);
+
+        // Calculate counter (current time divided by 30, floored)
+        const counter = Math.floor(currentTime / 30);
+
+        // Generate HOTP
+        const hotp = TOTP.generate(secret, {
             algorithm: "SHA-1",
             digits: 6,
-            period: 30,
-            timestamp: timestamp * 1000,
+            counter: counter
         });
-
-        const currentTimestamp = Math.floor(Date.now() / 1000);
 
         this.consoleInfo("secretCipherBytes:", secretCipherBytes);
         this.consoleInfo("secretBytes:", secretBytes);
         this.consoleInfo("secret:", secret);
-        const url = `https://open.spotify.com/get_access_token?reason=transport&productType=web_player&totp=${totp.otp}&totpVer=5&ts=${currentTimestamp}`;
+        this.consoleInfo("counter:", counter);
+
+        const buildVer = "web-player_2025-06-11_1749647683859_b8b186b";
+        const buildDate = "2025-06-11";
+
+        const url = `https://open.spotify.com/api/token?reason=init&productType=web-player&totp=${hotp.otp}&totpServer=${hotp.otp}&totpVer=5&sTime=${serverTime}&cTime=${currentTimeMs}&buildVer=${buildVer}&buildDate=${buildDate}`;
         this.consoleInfo("url:", url);
         return url;
     }
