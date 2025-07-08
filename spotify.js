@@ -223,8 +223,8 @@ class Spotify {
             return n;
         };
 
-        // 2025-07-03 see: https://github.com/librespot-org/librespot/issues/1475#issuecomment-3021776102
-        const secretCipherBytes = [37, 84, 32, 76, 87, 90, 87, 47, 13, 75, 48, 54, 44, 28, 19, 21, 22]
+        // 2025-07-08 see: https://github.com/librespot-org/librespot/issues/1475#issuecomment-3048400992
+        const secretCipherBytes = [111, 45, 40, 73, 95, 74, 35, 85, 105, 107, 60, 110, 55, 72, 69, 70, 114, 83, 63, 88, 91]
             .map((e, t) => e ^ t % 33 + 9)
 
         const secretBytes = new Uint8Array(cleanBuffer(Buffer.from(
