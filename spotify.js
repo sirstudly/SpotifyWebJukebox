@@ -224,8 +224,24 @@ class Spotify {
         };
 
         // 2025-07-08 see: https://github.com/librespot-org/librespot/issues/1475#issuecomment-3048400992
-        const secretCipherBytes = [111, 45, 40, 73, 95, 74, 35, 85, 105, 107, 60, 110, 55, 72, 69, 70, 114, 83, 63, 88, 91]
-            .map((e, t) => e ^ t % 33 + 9)
+        // Dynamically fetch latest secret bytes from https://github.com/Thereallo1026/spotify-secrets
+        let secretCipherBytes;
+        try {
+            const response = await fetch('https://github.com/Thereallo1026/spotify-secrets/blob/main/secrets/secretBytes.json?raw=true');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch secret bytes: ${response.status}`);
+            }
+            const secrets = await response.json();
+            const latestSecret = secrets[secrets.length - 1];
+            this.consoleInfo(`Using secret bytes version ${latestSecret.version}`);
+            secretCipherBytes = latestSecret.secret.map((e, t) => e ^ t % 33 + 9);
+        }
+        catch (error) {
+            this.consoleError("Failed to fetch latest secret bytes, using fallback:", error.message);
+            // Fallback to the last known working version
+            secretCipherBytes = [62, 54, 109, 83, 107, 77, 41, 103, 45, 93, 114, 38, 41, 97, 64, 51, 95, 94, 95, 94]
+                .map((e, t) => e ^ t % 33 + 9);
+        }
 
         const secretBytes = new Uint8Array(cleanBuffer(Buffer.from(
             secretCipherBytes.join(""), "utf8").toString("hex")).buffer);
