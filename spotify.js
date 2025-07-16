@@ -317,10 +317,16 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return this.runTask(async () => {
-            const result = await this.api.getPlaylist(playlistId, options);
-            return result.body;
-        });
+        // 2025-07-16: not sure what's going on here: getPlaylist API call is failing with a 404
+        return await this.api.getPlaylist(playlistId, options)
+            .then(resp => resp.body)
+            .catch(err => {
+                this.consoleError("Error on getPlaylist: " + playlistId, err);
+                return {
+                    "name": "Unable to load",
+                    "description": "GetPlaylist error: " + err.message,
+                };
+            })
     }
 
     async getTrack(trackId) {
