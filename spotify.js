@@ -227,11 +227,14 @@ class Spotify {
         // Dynamically fetch latest secret bytes from https://github.com/Thereallo1026/spotify-secrets
         let secretCipherBytes;
         try {
-            const response = await fetch('https://github.com/Thereallo1026/spotify-secrets/blob/main/secrets/secretBytes.json?raw=true');
+            const response = await agent.get('https://github.com/Thereallo1026/spotify-secrets/blob/main/secrets/secretBytes.json?raw=true')
+                .set('User-Agent', USER_AGENT)
+                .buffer(true);
+            
             if (!response.ok) {
                 throw new Error(`Failed to fetch secret bytes: ${response.status}`);
             }
-            const secrets = await response.json();
+            const secrets = JSON.parse(response.text);
             const latestSecret = secrets[secrets.length - 1];
             this.consoleInfo(`Using secret bytes version ${latestSecret.version}`);
             secretCipherBytes = latestSecret.secret.map((e, t) => e ^ t % 33 + 9);
