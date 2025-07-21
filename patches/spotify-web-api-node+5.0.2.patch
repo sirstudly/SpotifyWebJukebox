@@ -1,5 +1,5 @@
 diff --git a/node_modules/spotify-web-api-node/src/spotify-web-api.js b/node_modules/spotify-web-api-node/src/spotify-web-api.js
-index 2a756da..3274337
+index 2a756da..a02eb4a
 --- a/node_modules/spotify-web-api-node/src/spotify-web-api.js
 +++ b/node_modules/spotify-web-api-node/src/spotify-web-api.js
 @@ -184,6 +184,17 @@ SpotifyWebApi.prototype = {
@@ -20,3 +20,28 @@ index 2a756da..3274337
    /**
     * Look up an artist.
     * @param {string} artistId The artist's ID.
+@@ -449,6 +460,24 @@ SpotifyWebApi.prototype = {
+       .execute(HttpManager.get, callback);
+   },
+ 
++  /**
++   * Get a playlist with a custom access token.
++   * @param {string} playlistId The playlist's ID.
++   * @param {string} token The access token to use for the request.
++   * @param {Object} [options] Optional options, such as fields.
++   * @param {requestCallback} [callback] Optional callback method to be called instead of the promise.
++   * @example getPlaylistWithToken('3EsfV6XzCHU8SPNdbnFogK', 'custom_token').then(...)
++   * @returns {Promise|undefined} A promise that if successful, resolves to an object containing
++   *          the playlist. If rejected, it contains an error object. Not returned if a callback is given.
++   */
++  getPlaylistWithToken: function(playlistId, token, options, callback) {
++    return WebApiRequest.builder(token)
++      .withPath('/v1/playlists/' + playlistId)
++      .withQueryParameters(options)
++      .build()
++      .execute(HttpManager.get, callback);
++  },
++
+   /**
+    * Get tracks in a playlist.
+    * @param {string} playlistId The playlist's ID.
