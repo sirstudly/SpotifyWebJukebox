@@ -317,11 +317,11 @@ class Spotify {
     }
 
     async getPlaylist(playlistId, options) {
-        if (!this.isWebAuthTokenValid()) {
-            await this.refreshWebAuthToken();
+        if (!this.isAuthTokenValid()) {
+            await this.refreshAuthToken();
         }
-        // 2025-07-21: Spotify curated playlists will fail with a 404 using the normal access token
-        return await this.api.getPlaylistWithToken(playlistId, this.web_auth.access_token, options)
+        // 2025-07-16: not sure what's going on here: getPlaylist API call is failing with a 404
+        return await this.api.getPlaylist(playlistId, options)
             .then(resp => resp.body)
             .catch(err => {
                 this.consoleError("Error on getPlaylist: " + playlistId, err);
