@@ -224,10 +224,10 @@ class Spotify {
         };
 
         // 2025-07-08 see: https://github.com/librespot-org/librespot/issues/1475#issuecomment-3048400992
-        // Dynamically fetch latest secret bytes from https://github.com/Thereallo1026/spotify-secrets
+        // Dynamically fetch latest secret bytes from https://git.gay/thereallo/totp-secrets
         let secretCipherBytes;
         try {
-            const response = await agent.get('https://github.com/Thereallo1026/spotify-secrets/blob/main/secrets/secretBytes.json?raw=true')
+            const response = await agent.get('https://git.gay/thereallo/totp-secrets/raw/branch/main/secrets/secretBytes.json')
                 .set('User-Agent', USER_AGENT)
                 .buffer(true);
             
@@ -241,8 +241,8 @@ class Spotify {
         }
         catch (error) {
             this.consoleError("Failed to fetch latest secret bytes, using fallback:", error.message);
-            // Fallback to the last known working version
-            secretCipherBytes = [62, 54, 109, 83, 107, 77, 41, 103, 45, 93, 114, 38, 41, 97, 64, 51, 95, 94, 95, 94]
+            // Fallback to the last known working version (version 59)
+            secretCipherBytes = [123,105,79,70,110,59,52,125,60,49,80,70,89,75,80,86,63,53,123,37,117,49,52,93,77,62,47,86,48,104,68,72]
                 .map((e, t) => e ^ t % 33 + 9);
         }
 
