@@ -3,14 +3,14 @@ const urlParams = new URLSearchParams(window.location.search);
 if (localStorage.getItem('deviceId') == null) {
     function makeId(length) {
         var out = '';
-        var numbers = '0123456789';
+        var hexChars = '0123456789abcdef';
         for ( let i = 0; i < length; i++ ) {
-            out += numbers.charAt(Math.floor(Math.random() * numbers.length));
+            out += hexChars.charAt(Math.floor(Math.random() * hexChars.length));
         }
         return out;
         }
 
-    localStorage.setItem('deviceId', makeId(4))
+    localStorage.setItem('deviceId', makeId(8))
 }
 
 function msToTime(duration) {

@@ -807,7 +807,8 @@
             queueTrack(trackUri) {
                 if (trackUri) {
                     this.isLoading = true;
-                    fetch(`/queue-track?trackUri=${trackUri}`)
+                    const deviceId = localStorage.getItem('deviceId') || '';
+                    fetch(`/queue-track?trackUri=${trackUri}&deviceId=${deviceId}`)
                         .then(res => {
                             if (res.ok) {
                                 this.setMessage("Track queued.")

@@ -221,18 +221,80 @@ app.get("/transfer-playback", async (req, res) => {
         .catch(err => res.status(500).send({error: err.message}));
 });
 
+// Helper function to get user identifier (deviceId from localStorage or sessionID as fallback)
+function getUserIdentifier(req) {
+    return req.query.deviceId || req.sessionID;
+}
+
+// Helper function to check if user is on blacklist
+function isUserOnBlacklist(userId) {
+    if (process.env.USER_BLACKLIST && process.env.USER_BLACKLIST.includes(userId)) {
+        return true;
+    }
+    return false;
+}
+
+// Helper function to check if track is blacklisted
+async function isTrackBlacklisted(trackUri) {
+    if (process.env.TRACK_BLACKLIST_REGEX) {
+        // Extract track ID from URI (format: spotify:track:TRACK_ID)
+        const trackId = trackUri.substring(trackUri.lastIndexOf(":") + 1);
+        const track = await spotify.getTrack(trackId);
+        if (new RegExp(process.env.TRACK_BLACKLIST_REGEX, 'i').test(track.name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 app.get("/queue-track", async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    spotify.consoleInfo( `[${req.sessionID}]: queueing track ${req.query.trackUri}`);
+    const userId = getUserIdentifier(req);
+    spotify.consoleInfo( `[${userId}]: queueing track ${req.query.trackUri}`);
+    
+    // Check if function is disabled
     if (process.env.DISABLED && 'true' === process.env.DISABLED.toLowerCase()) {
         res.status(503).send({error: "This function is currently disabled."})
+        return;
     }
-    else {
-        spotify.queueTrack(req.query.trackUri)
-            .then(state => res.status(200).send(state))
-            .catch(err => res.status(500).send({error: err.message}));
+    
+    // Check if user is blacklisted
+    if (isUserOnBlacklist(userId)) {
+        res.status(403).send({error: "Yeah, nah... I don't think so. You're a bit of a twat."})
+        return;
     }
+    
+    // Check if track is already queued
+    if (spotify.isTrackQueued(req.query.trackUri)) {
+        res.status(400).send({error: "This track has already been queued."})
+        return;
+    }
+    
+    // Check if track is blacklisted
+    try {
+        if (await isTrackBlacklisted(req.query.trackUri)) {
+            if (process.env.USER_WARNLIST && process.env.USER_WARNLIST.includes(userId)) {
+                spotify.consoleError("Blacklisting user " + userId);
+                process.env.USER_BLACKLIST = (process.env.USER_BLACKLIST || "") + (process.env.USER_BLACKLIST ? "," : "") + userId;
+                res.status(403).send({error: "Haha.. nice one."})
+            }
+            else {
+                process.env.USER_WARNLIST = (process.env.USER_WARNLIST || "") + (process.env.USER_WARNLIST ? "," : "") + userId;
+                res.status(403).send({error: "Do you want to get banned? This is how you get banned..."})
+            }
+            return;
+        }
+    }
+    catch (err) {
+        spotify.consoleError("Error checking track blacklist:", err);
+        // Continue with queueing if we can't check blacklist
+    }
+    
+    // Queue the track
+    spotify.queueTrack(req.query.trackUri)
+        .then(state => res.status(200).send(state))
+        .catch(err => res.status(500).send({error: err.message}));
 });
 
 app.get("/play", async (req, res) => {
