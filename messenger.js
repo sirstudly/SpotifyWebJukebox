@@ -317,10 +317,8 @@ class Messenger {
                     this.sendMessage(sender, { text: "Sorry, we couldn't find that." });
                 }
                 else if (result.tracks.items.length > 0) {
-                    // If there are enough remaining results, we can give the user
-                    // a 'More' button to pull further results
-                    const remainingResults = result.tracks.total - limit - skip;
-                    const showMoreButton = (remainingResults > 0);
+                    // Show "More" when API indicates another page (next); in Dev Mode total may be capped
+                    const showMoreButton = !!(result.tracks.next);
 
                     // Sort by name (popularity removed in Feb 2026 Web API)
                     result.tracks.items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -426,10 +424,8 @@ class Messenger {
     async collatePlaylistResults(result, terms = null, skip = 0, limit = 10) {
 
         if (result.items.length > 0) {
-            // If there are enough remaining results, we can give the user
-            // a 'More' button to pull further results
-            const remainingResults = result.total - limit - skip;
-            const showMoreButton = (remainingResults > 0);
+            // Show "More" when API indicates another page (next); in Dev Mode total may be capped
+            const showMoreButton = !!(result.next);
 
             const message = {
                 attachment: {
@@ -496,10 +492,8 @@ class Messenger {
     async collateAlbumResults(result, terms = null, skip = 0, limit = 10) {
 
         if (result.items.length > 0) {
-            // If there are enough remaining results, we can give the user
-            // a 'More' button to pull further results
-            const remainingResults = result.total - limit - skip;
-            const showMoreButton = (remainingResults > 0);
+            // Show "More" when API indicates another page (next); in Dev Mode total may be capped
+            const showMoreButton = !!(result.next);
 
             const message = {
                 attachment: {
@@ -566,10 +560,8 @@ class Messenger {
     async collateArtistResults(result, terms = null, skip = 0, limit = 10) {
 
         if (result.items.length > 0) {
-            // If there are enough remaining results, we can give the user
-            // a 'More' button to pull further results
-            const remainingResults = result.total - limit - skip;
-            const showMoreButton = (remainingResults > 0);
+            // Show "More" when API indicates another page (next); in Dev Mode total may be capped
+            const showMoreButton = !!(result.next);
 
             // Sort by name (popularity removed in Feb 2026 Web API)
             result.items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -637,10 +629,8 @@ class Messenger {
                     this.sendMessage(sender, { text: "Sorry, unable to load tracks." });
                 }
                 else if (result.items.length > 0) {
-                    // If there are enough remaining results, we can give the user
-                    // a 'More' button to pull further results
-                    const remainingResults = result.total - limit - skip;
-                    const showMoreButton = (remainingResults > 0);
+                    // Show "More" when API indicates another page (next)
+                    const showMoreButton = !!(result.next);
 
                     const message = {
                         attachment: {
@@ -706,10 +696,8 @@ class Messenger {
                     this.sendMessage(sender, { text: "Sorry, unable to load tracks." });
                 }
                 else if (result.tracks.items.length > 0) {
-                    // If there are enough remaining results, we can give the user
-                    // a 'More' button to pull further results
-                    const remainingResults = result.tracks.total - limit - skip;
-                    const showMoreButton = (remainingResults > 0);
+                    // Show "More" when API indicates another page (next)
+                    const showMoreButton = !!(result.tracks.next);
 
                     const message = {
                         attachment: {
@@ -773,10 +761,8 @@ class Messenger {
                     this.sendMessage(sender, { text: "Sorry, unable to load albums." });
                 }
                 else if (result.items.length > 0) {
-                    // If there are enough remaining results, we can give the user
-                    // a 'More' button to pull further results
-                    const remainingResults = result.total - limit - skip;
-                    const showMoreButton = (remainingResults > 0);
+                    // Show "More" when API indicates another page (next)
+                    const showMoreButton = !!(result.next);
 
                     const message = {
                         attachment: {

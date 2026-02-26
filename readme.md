@@ -58,7 +58,7 @@ v1.0
 
 ## **Upcoming changes**
 
-- [ ] Show more than 20 tracks when searching 
+- [ ] Show more than 10 tracks when searching 
 - [ ] Setup WSS server and push out notifications rather than poll every second
 - [ ] Prevent songs matching keywords from being queued, eg. "farts"
 - [ ] Implement blacklist by sessionID
