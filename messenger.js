@@ -322,8 +322,8 @@ class Messenger {
                     const remainingResults = result.tracks.total - limit - skip;
                     const showMoreButton = (remainingResults > 0);
 
-                    // Sort the results by popularity
-                    result.tracks.items.sort((a, b) => (b.popularity - a.popularity));
+                    // Sort by name (popularity removed in Feb 2026 Web API)
+                    result.tracks.items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
                     const message = {
                         attachment: {
@@ -571,8 +571,8 @@ class Messenger {
             const remainingResults = result.total - limit - skip;
             const showMoreButton = (remainingResults > 0);
 
-            // Sort the results by popularity
-            result.items.sort((a, b) => (b.popularity - a.popularity));
+            // Sort by name (popularity removed in Feb 2026 Web API)
+            result.items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
             const message = {
                 attachment: {

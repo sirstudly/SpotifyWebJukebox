@@ -30,6 +30,10 @@ This project is licensed under GNU GPL-3.0 license.
 
 ## **Spotify Jukebox Changelog**
 
+v1.3
+- updated for the [February 2026 Web API changes](https://developer.spotify.com/documentation/web-api/references/changes/february-2026) 
+
+
 v1.2
 - merged facebook messenger bot support with blacklisting of users/tracks from https://github.com/sirstudly/SpotifyJukebox
 

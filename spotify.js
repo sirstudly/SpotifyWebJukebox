@@ -284,8 +284,9 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
+        const cappedLimit = Math.min(Math.max(1, limit), 10); // Feb 2026: search limit max 10
         return this.runTask(async () => {
-            const result = await this.api.search(terms, types, {offset: skip, limit: limit});
+            const result = await this.api.search(terms, types, {offset: skip, limit: cappedLimit});
 
             // 2025-02-02 spotify is being wonky and returning null items?!
             if (result.body && result.body.playlists && result.body.playlists.items) {
@@ -296,13 +297,30 @@ class Spotify {
         });
     }
 
+    /**
+     * Get playlist items. Uses GET /playlists/{id}/items (Feb 2026: /tracks → /items, tracks.tracks.track → items.items.item).
+     * Returns body normalized to legacy shape { items: [{ track }], total } for compatibility.
+     */
     async getPlaylistTracks(playlistId, skip = 0, limit = 10) {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
         return this.runTask(async () => {
-            const result = await this.api.getPlaylistTracks(playlistId, {offset: skip, limit: limit});
-            return result.body;
+            const resp = await agent.get(`https://api.spotify.com/v1/playlists/${playlistId}/items`)
+                .query({ offset: skip, limit })
+                .set('Authorization', 'Bearer ' + this.api.getAccessToken())
+                .then(r => r.body);
+            // Feb 2026: response has items[].item (was items[].track); normalize to legacy shape
+            const list = Array.isArray(resp.items) ? resp.items : [];
+            return {
+                items: list.map(it => ({ track: it.item != null ? it.item : it.track })),
+                total: resp.total != null ? resp.total : list.length,
+                limit: resp.limit,
+                offset: resp.offset,
+                href: resp.href,
+                next: resp.next,
+                previous: resp.previous
+            };
         });
     }
 
@@ -349,12 +367,19 @@ class Spotify {
         });
     }
 
+    /**
+     * Fetch multiple tracks by ID. Uses GET /tracks/{id} per track (batch GET /tracks removed in Feb 2026).
+     */
     async getTracks(trackIds) {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        const result = await this.api.getTracks(trackIds);
-        return result.body.tracks;
+        const results = await Promise.all(
+            trackIds.map(id =>
+                this.api.getTrack(id).then(r => r.body).catch(() => null)
+            )
+        );
+        return results;
     }
 
     async getAlbum(albumId) {
@@ -873,15 +898,14 @@ class Spotify {
                     is_queued: trackDict[track.uri]?.metadata?.is_queued == 'true'
                 }
             };
-            // retrieve all the track info in one api request for efficiency
+            // fetch each track (batch GET /tracks removed Feb 2026); filter out failed lookups
             let nextTracks = await this.getTracks([
                 playerState.track.uri.substring(playerState.track.uri.lastIndexOf(":") + 1),
                 ...playerState.next_tracks
                     .filter(t => t.uri.indexOf("spotify:track:") >= 0)
-                    .slice(0, 49) // API allows for max of 50
+                    .slice(0, 49)
                     .map(t => t.uri.substring(t.uri.lastIndexOf(":") + 1))]);
-            // now strip out only the data that we need
-            nextTracks = nextTracks.map(t => getTrackInfo(t));
+            nextTracks = nextTracks.filter(Boolean).map(t => getTrackInfo(t));
             const playlist_context = await this._getCurrentContext(playerState.context_uri);
             this.nowPlaying = {
                 last_updated: Date.now(), // FIXME: this is duplicated with timestamp, do we need both?
