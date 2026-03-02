@@ -14,21 +14,74 @@ dotenv.config();
 
 class Spotify {
 
-    // (re)attempt a task, a given number of times
-    async runTask(task, limit = 1) {
-        return task().catch(async(e) => {
-            this.consoleError(`Attempt failed, ${limit} tries remaining.`, e);
-            if (e.message == "Unauthorized") {
-                this.consoleInfo("Unauthorized? Refreshing auth token...");
-                await this.refreshAuthToken();
+    // (re)attempt a task, a given number of times with rate limiting and 429-aware backoff
+    async runTask(task, limit = 1, options = {}) {
+        const feature = options.feature || "unspecified";
+        // limit is the remaining retry count; total attempts = limit + 1
+        let remainingRetries = limit;
+        let backoffSeconds = 1;
+
+        // simple token-bucket style app-level rate limiter
+        const acquireSlot = async () => {
+            if (!this._rateLimitState) {
+                this._rateLimitState = {
+                    timestamps: []
+                };
             }
-            if (limit <= 0) {
-                this.consoleError("Too many attempts. Giving up.");
-                throw e;
+            const windowMs = parseInt(process.env.SPOTIFY_RATE_LIMIT_WINDOW_MS || "1000", 10);
+            const maxRequests = parseInt(process.env.SPOTIFY_RATE_LIMIT_MAX_REQUESTS || "5", 10);
+
+            while (true) {
+                const now = Date.now();
+                this._rateLimitState.timestamps = this._rateLimitState.timestamps.filter(t => now - t < windowMs);
+                if (this._rateLimitState.timestamps.length < maxRequests) {
+                    this._rateLimitState.timestamps.push(now);
+                    return;
+                }
+                const oldest = this._rateLimitState.timestamps[0];
+                const waitMs = Math.max(50, windowMs - (now - oldest));
+                this.consoleInfo(`App rate limiter delaying Spotify call (${feature}) by ${waitMs}ms`);
+                await this.sleep(waitMs);
             }
-            await this.sleep(2000);
-            return this.runTask(task, limit - 1);
-        })
+        };
+
+        while (true) {
+            await acquireSlot();
+            try {
+                return await task();
+            } catch (e) {
+                this.consoleError(`Attempt failed for ${feature}, ${remainingRetries} tries remaining.`, e);
+
+                // Unauthorized: refresh token once then retry
+                if (this._isUnauthorizedError(e)) {
+                    this.consoleInfo("Unauthorized? Refreshing auth token...");
+                    await this.refreshAuthToken().catch(err => {
+                        this.consoleError("Failed to refresh auth token during retry.", err);
+                    });
+                }
+
+                // Rate limited: honor Retry-After header when present
+                if (this._isRateLimitError(e)) {
+                    const retryAfterSeconds = this._getRetryAfterSeconds(e);
+                    const waitSeconds = Math.max(retryAfterSeconds, backoffSeconds, 1);
+                    this.consoleError(`Received 429 from Spotify for ${feature}, waiting ${waitSeconds}s before retry.`);
+                    await this.sleep(waitSeconds * 1000);
+                    backoffSeconds = Math.min(backoffSeconds * 2, 60);
+                } else {
+                    // other transient errors: exponential backoff
+                    const waitSeconds = Math.max(backoffSeconds, 1);
+                    this.consoleInfo(`Backing off ${waitSeconds}s before retry for ${feature}.`);
+                    await this.sleep(waitSeconds * 1000);
+                    backoffSeconds = Math.min(backoffSeconds * 2, 60);
+                }
+
+                if (remainingRetries <= 0) {
+                    this.consoleError(`Too many attempts for ${feature}. Giving up.`);
+                    throw e;
+                }
+                remainingRetries -= 1;
+            }
+        }
     }
 
     getAuthorizeUrl() {
@@ -59,25 +112,27 @@ class Spotify {
         }
         this.consoleInfo("Attempting to retreive web auth token with sp_dc: " + sp_dc);
         const access_token_url = await this.getAccessTokenUrl();
-        this.web_auth = await agent.get(access_token_url)
-            .query({reason: "transport", productType: "web_player"})
-            .set('Content-Type', 'application/json')
-            .set('User-Agent', USER_AGENT)
-            .set('Cookie', "sp_dc=" + sp_dc)
-            // .use(superdebug.default(console.info))
-            .then(resp => {
-                // isAnonymous should be false (Spotify should be able to identify who's account it is)
-                if (resp.body.isAnonymous) {
-                    this.consoleError("Response:", JSON.stringify(resp.body));
-                    throw new Error("Unable to retrieve access token");
-                }
-                this.consoleInfo("Response:", JSON.stringify(resp.body));
-                return {
-                    client_id: resp.body.clientId,
-                    access_token: resp.body.accessToken,
-                    expires_at: resp.body.accessTokenExpirationTimestampMs
-                }
-            });
+        this.web_auth = await this.runTask(async () => {
+            return agent.get(access_token_url)
+                .query({reason: "transport", productType: "web_player"})
+                .set('Content-Type', 'application/json')
+                .set('User-Agent', USER_AGENT)
+                .set('Cookie', "sp_dc=" + sp_dc)
+                // .use(superdebug.default(console.info))
+                .then(resp => {
+                    // isAnonymous should be false (Spotify should be able to identify who's account it is)
+                    if (resp.body.isAnonymous) {
+                        this.consoleError("Response:", JSON.stringify(resp.body));
+                        throw new Error("Unable to retrieve access token");
+                    }
+                    this.consoleInfo("Response:", JSON.stringify(resp.body));
+                    return {
+                        client_id: resp.body.clientId,
+                        access_token: resp.body.accessToken,
+                        expires_at: resp.body.accessTokenExpirationTimestampMs
+                    }
+                });
+        }, 1, {feature: "refreshWebAuthToken"});
         this.web_auth.sp_dc = sp_dc;
         this.consoleInfo("Web Access Token:", this.web_auth.access_token);
         this.saveTokensToFile();
@@ -159,15 +214,17 @@ class Spotify {
         if (this.api === undefined || this.api.getAccessToken() === undefined) {
             return Promise.reject("Spotify not yet initialized...");
         }
-        return this.api.refreshAccessToken()
-            .then(result => {
-                this.auth.access_token = result.body.access_token;
-                this.auth.expires_at = result.body.expires_in * 1000 + new Date().getTime();
+        return this.runTask(async () => {
+            return this.api.refreshAccessToken()
+                .then(result => {
+                    this.auth.access_token = result.body.access_token;
+                    this.auth.expires_at = result.body.expires_in * 1000 + new Date().getTime();
 
-                this.api.setAccessToken(result.body.access_token);
-                this.consoleInfo("Access Token:", result.body.access_token);
-                this.saveTokensToFile();
-            })
+                    this.api.setAccessToken(result.body.access_token);
+                    this.consoleInfo("Access Token:", result.body.access_token);
+                    this.saveTokensToFile();
+                });
+        }, 1, {feature: "refreshAuthToken"});
     }
 
     /**
@@ -227,9 +284,11 @@ class Spotify {
         // Dynamically fetch latest secret bytes from https://git.gay/thereallo/totp-secrets
         let secretCipherBytes;
         try {
-            const response = await agent.get('https://git.gay/thereallo/totp-secrets/raw/branch/main/secrets/secretBytes.json')
+            const response = await this.runTask(async () => {
+                return agent.get('https://git.gay/thereallo/totp-secrets/raw/branch/main/secrets/secretBytes.json')
                 .set('User-Agent', USER_AGENT)
                 .buffer(true);
+            }, 1, {feature: "fetchTotpSecrets"});
             
             if (!response.ok) {
                 throw new Error(`Failed to fetch secret bytes: ${response.status}`);
@@ -252,7 +311,9 @@ class Spotify {
         const secret = base32FromBytes(secretBytes);
 
         // See https://github.com/librespot-org/librespot/issues/1475#issuecomment-2961128642
-        const res = await agent.get("https://open.spotify.com/api/server-time").then(resp => JSON.parse(resp.text));
+        const res = await this.runTask(async () => {
+            return agent.get("https://open.spotify.com/api/server-time").then(resp => JSON.parse(resp.text));
+        }, 1, {feature: "getServerTime"});
         const serverTime = res["serverTime"];
         const currentTimeMs = Date.now();
         const currentTime = Math.floor(currentTimeMs / 1000);
@@ -294,7 +355,7 @@ class Spotify {
             }
 
             return result.body;
-        });
+        }, 1, {feature: "search"});
     }
 
     /**
@@ -321,7 +382,7 @@ class Spotify {
                 next: resp.next,
                 previous: resp.previous
             };
-        });
+        }, 1, {feature: "getPlaylistTracks"});
     }
 
     async getAlbumTracks(albumId, skip = 0, limit = 10) {
@@ -331,7 +392,7 @@ class Spotify {
         return this.runTask(async () => {
             const result = await this.api.getAlbum(albumId, {offset: skip, limit: limit});
             return result.body;
-        });
+        }, 1, {feature: "getAlbumTracks"});
     }
 
     async getPlaylist(playlistId, options) {
@@ -339,15 +400,21 @@ class Spotify {
             await this.refreshWebAuthToken();
         }
         // 2025-07-21: Spotify curated playlists will fail with a 404 using the normal access token
-        return await this.api.getPlaylistWithToken(playlistId, this.web_auth.access_token, options)
-            .then(resp => resp.body)
+        return await this.runTask(async () => {
+            return this.api.getPlaylistWithToken(playlistId, this.web_auth.access_token, options)
+                .then(resp => resp.body)
+                .catch(err => {
+                    this.consoleError("Error on getPlaylist: " + playlistId, err);
+                    throw err;
+                });
+        }, 1, {feature: "getPlaylist"})
             .catch(err => {
-                this.consoleError("Error on getPlaylist: " + playlistId, err);
+                this.consoleError("GetPlaylist failed after retries: " + playlistId, err);
                 return {
                     "name": "Unable to load",
                     "description": "GetPlaylist error: " + err.message,
                 };
-            })
+            });
     }
 
     async getTrack(trackId) {
@@ -357,14 +424,14 @@ class Spotify {
         return this.runTask(async () => {
             const result = await this.api.getTrack(trackId);
             return result.body;
-        });
+        }, 1, {feature: "getTrack"});
     }
 
     async getTrackByURI(uri) {
         return this.runTask(() => {
             return this.api.getTrack(uri.substring(uri.lastIndexOf(":") + 1))
                 .then(track => track.body);
-        });
+        }, 1, {feature: "getTrackByURI"});
     }
 
     /**
@@ -374,12 +441,14 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        const results = await Promise.all(
-            trackIds.map(id =>
-                this.api.getTrack(id).then(r => r.body).catch(() => null)
-            )
-        );
-        return results;
+        return this.runTask(async () => {
+            const results = await Promise.all(
+                trackIds.map(id =>
+                    this.api.getTrack(id).then(r => r.body).catch(() => null)
+                )
+            );
+            return results;
+        }, 1, {feature: "getTracks"});
     }
 
     async getAlbum(albumId) {
@@ -389,7 +458,7 @@ class Spotify {
         return this.runTask(async () => {
             const result = await this.api.getAlbum(albumId);
             return result.body;
-        });
+        }, 1, {feature: "getAlbum"});
     }
 
     async getArtist(artistId) {
@@ -399,7 +468,7 @@ class Spotify {
         return this.runTask(async () => {
             const result = await this.api.getArtist(artistId);
             return result.body;
-        });
+        }, 1, {feature: "getArtist"});
     }
 
     async getArtistAlbums(artistId, skip = 0, limit = 10) {
@@ -409,14 +478,16 @@ class Spotify {
         return this.runTask(async () => {
             const result = await this.api.getArtistAlbums(artistId, {offset: skip, limit: limit});
             return result.body;
-        });
+        }, 1, {feature: "getArtistAlbums"});
     }
 
     async getMyDevices() {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return await this.api.getMyDevices();
+        return await this.runTask(() => {
+            return this.api.getMyDevices();
+        }, 1, {feature: "getMyDevices"});
     }
 
     /**
@@ -439,7 +510,9 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return await this.api.transferMyPlayback( { deviceIds: [deviceId], play: playNow });
+        return await this.runTask(() => {
+            return this.api.transferMyPlayback( { deviceIds: [deviceId], play: playNow });
+        }, 1, {feature: "transferPlaybackToDevice"});
     }
 
     async getPlaybackState() {
@@ -448,29 +521,31 @@ class Spotify {
         }
         return await this.runTask(() => {
             return this.api.getMyCurrentPlaybackState();
-        });
+        }, 1, {feature: "getPlaybackState"});
     }
 
     async getLyrics() {
         if (!this.isWebAuthTokenValid()) {
             await this.refreshWebAuthToken();
         }
-        return agent.get(`https://spclient.wg.spotify.com/color-lyrics/v2/track/${this.nowPlaying.now_playing.id}?format=json&vocalRemoval=false`)
-            .auth(this.web_auth.access_token, {type: 'bearer'})
-            .set('Content-Type', 'application/json')
-            .set('accept', 'application/json')
-            .set('User-Agent', USER_AGENT)
-            .set('app-platform', 'WebPlayer')
-            // .use(superdebug.default(console.info))
-            .buffer(true)
-            .send()
-            .then(resp => JSON.parse(resp.text));
+        return this.runTask(async () => {
+            return agent.get(`https://spclient.wg.spotify.com/color-lyrics/v2/track/${this.nowPlaying.now_playing.id}?format=json&vocalRemoval=false`)
+                .auth(this.web_auth.access_token, {type: 'bearer'})
+                .set('Content-Type', 'application/json')
+                .set('accept', 'application/json')
+                .set('User-Agent', USER_AGENT)
+                .set('app-platform', 'WebPlayer')
+                // .use(superdebug.default(console.info))
+                .buffer(true)
+                .send()
+                .then(resp => JSON.parse(resp.text));
+        }, 1, {feature: "getLyrics"});
     }
 
     async getVolume() {
         const playbackState = await this.runTask(() => {
             return this.getPlaybackState();
-        });
+        }, 1, {feature: "getVolume"});
         if (playbackState.body.device) {
             return playbackState.body.device.volume_percent;
         }
@@ -486,7 +561,7 @@ class Spotify {
             if (typeof v == 'number' && v <= 100) {
                 return await this.runTask(() => {
                     return this.api.setVolume(v);
-                });
+                }, 1, {feature: "setVolume"});
             }
         }
         throw new Error("Volume can only be set to a whole number between 0 and 100.");
@@ -504,7 +579,7 @@ class Spotify {
             const result = await this.api.addToQueue(trackURI);
             this.consoleInfo("Queued track response:", result);
             return result;
-        });
+        }, 1, {feature: "queueTrack"});
     }
 
     isTrackQueued(trackUri) {
@@ -524,7 +599,7 @@ class Spotify {
         }
         return await this.runTask(() => {
             return this.api.skipToNext();
-        });
+        }, 1, {feature: "skipTrack"});
     }
 
     async prevTrack() {
@@ -533,7 +608,7 @@ class Spotify {
         }
         return await this.runTask(() => {
             return this.api.skipToPrevious();
-        });
+        }, 1, {feature: "prevTrack"});
     }
 
     async getQueue() {
@@ -542,7 +617,7 @@ class Spotify {
         }
         return await this.runTask(() => {
             return this.api.getQueue();
-        });
+        }, 1, {feature: "getQueue"});
     }
 
     async togglePlay() {
@@ -559,7 +634,7 @@ class Spotify {
         }
         return await this.runTask(() => {
             return this.api.pause();
-        });
+        }, 1, {feature: "pausePlayback"});
     }
 
     async resumePlayback() {
@@ -568,7 +643,7 @@ class Spotify {
         }
         return await this.runTask(async() => {
             return this.api.play({device_id: await this.getPlaybackDeviceId()});
-        });
+        }, 1, {feature: "resumePlayback"});
     }
 
     async setRepeat() {
@@ -577,7 +652,7 @@ class Spotify {
         }
         return await this.runTask(() => {
             return this.api.setRepeat("context");
-        });
+        }, 1, {feature: "setRepeat"});
     }
 
     async setShuffle() {
@@ -586,7 +661,7 @@ class Spotify {
         }
         return await this.runTask(() => {
             return this.api.setShuffle(true);
-        });
+        }, 1, {feature: "setShuffle"});
     }
 
     async play(uri) {
@@ -622,38 +697,40 @@ class Spotify {
         if (!this.isWebAuthTokenValid()) {
             await this.refreshWebAuthToken();
         }
-        return agent.post(`https://gew-spclient.spotify.com/connect-state/v1/player/command/from/${fromDeviceId}/to/${toDeviceId}`)
-            .auth(this.web_auth.access_token, {type: 'bearer'})
-            .set('Content-Type', 'application/json') // text/plain;charset=UTF-8 (in chrome web player)
-            .set('User-Agent', USER_AGENT)
-            .buffer(true)
-            .send({
-                "command": {
-                    "context": {
-                        "uri": uri,
-                        "url": "context://" + uri,
-                        "metadata": {}
-                    },
-                    "play_origin": {
-                        "feature_identifier": "harmony",
-                        "feature_version": "4.9.0-d242618"
-                    },
-                    "options": {
-                        "license": "premium",
-                        "skip_to": {},
-                        "player_options_override": {
-                            "repeating_track": false,
-                            "repeating_context": true
+        return this.runTask(async () => {
+            return agent.post(`https://gew-spclient.spotify.com/connect-state/v1/player/command/from/${fromDeviceId}/to/${toDeviceId}`)
+                .auth(this.web_auth.access_token, {type: 'bearer'})
+                .set('Content-Type', 'application/json') // text/plain;charset=UTF-8 (in chrome web player)
+                .set('User-Agent', USER_AGENT)
+                .buffer(true)
+                .send({
+                    "command": {
+                        "context": {
+                            "uri": uri,
+                            "url": "context://" + uri,
+                            "metadata": {}
+                        },
+                        "play_origin": {
+                            "feature_identifier": "harmony",
+                            "feature_version": "4.9.0-d242618"
+                        },
+                        "options": {
+                            "license": "premium",
+                            "skip_to": {},
+                            "player_options_override": {
+                                "repeating_track": false,
+                                "repeating_context": true
+                            }
                         }
                     },
                     "endpoint": "play"
-                }
-            })
-            .then(resp => JSON.parse(resp.text))
-            .catch(err => {
-                this.consoleError("Failed to play uri: " + uri, err);
-                throw err;
-            });
+                })
+                .then(resp => JSON.parse(resp.text))
+                .catch(err => {
+                    this.consoleError("Failed to play uri: " + uri, err);
+                    throw err;
+                });
+        }, 1, {feature: "_play"});
     }
 
     getStatus() {
@@ -671,49 +748,51 @@ class Spotify {
         }
         this.fakeDeviceId = crypto.randomBytes(20).toString("hex");
         this.consoleInfo("Registering fake device id " + this.fakeDeviceId);
-        return agent.post(`https://gew-spclient.spotify.com/track-playback/v1/devices`)
-            .auth(this.web_auth.access_token, {type: 'bearer'})
-            .set('Content-Type', 'application/json')
-            .set('User-Agent', USER_AGENT)
-            .buffer(true)
-            .send({
-                "device": {
-                    "brand": "spotify",
-                    "capabilities": {
-                        "change_volume": true,
-                        "enable_play_token": true,
-                        "supports_file_media_type": true,
-                        "play_token_lost_behavior": "pause",
-                        "disable_connect": true,
-                        "audio_podcasts": true,
-                        "video_playback": true,
-                        "manifest_formats": [
-                            "file_urls_mp3",
-                            "manifest_ids_video",
-                            "file_urls_external",
-                            "file_ids_mp4",
-                            "file_ids_mp4_dual"
-                        ]
+        return this.runTask(async () => {
+            return agent.post(`https://gew-spclient.spotify.com/track-playback/v1/devices`)
+                .auth(this.web_auth.access_token, {type: 'bearer'})
+                .set('Content-Type', 'application/json')
+                .set('User-Agent', USER_AGENT)
+                .buffer(true)
+                .send({
+                    "device": {
+                        "brand": "spotify",
+                        "capabilities": {
+                            "change_volume": true,
+                            "enable_play_token": true,
+                            "supports_file_media_type": true,
+                            "play_token_lost_behavior": "pause",
+                            "disable_connect": true,
+                            "audio_podcasts": true,
+                            "video_playback": true,
+                            "manifest_formats": [
+                                "file_urls_mp3",
+                                "manifest_ids_video",
+                                "file_urls_external",
+                                "file_ids_mp4",
+                                "file_ids_mp4_dual"
+                            ]
+                        },
+                        "device_id": this.fakeDeviceId,
+                        "device_type": "computer",
+                        "metadata": {},
+                        "model": "web_player",
+                        "name": "Fake Jambot Player",
+                        "platform_identifier": "web_player windows 10;chrome 87.0.4280.66;desktop"
                     },
-                    "device_id": this.fakeDeviceId,
-                    "device_type": "computer",
-                    "metadata": {},
-                    "model": "web_player",
-                    "name": "Fake Jambot Player",
-                    "platform_identifier": "web_player windows 10;chrome 87.0.4280.66;desktop"
-                },
-                "connection_id": this.spotifyConnectionId,
-                "client_version": "harmony:4.11.0-af0ef98",
-                "volume": 65535
-            })
-            .then(resp => {
-                this.consoleInfo("Device registration response", resp);
-                return JSON.parse(resp.text);
-            })
-            .catch(err => {
-                this.consoleError("Failed to register fake device.", err);
-                throw err;
-            });
+                    "connection_id": this.spotifyConnectionId,
+                    "client_version": "harmony:4.11.0-af0ef98",
+                    "volume": 65535
+                })
+                .then(resp => {
+                    this.consoleInfo("Device registration response", resp);
+                    return JSON.parse(resp.text);
+                })
+                .catch(err => {
+                    this.consoleError("Failed to register fake device.", err);
+                    throw err;
+                });
+        }, 1, {feature: "registerFakeDevice"});
     }
 
     /**
@@ -726,56 +805,60 @@ class Spotify {
         }
         const clientToken = await this.getClientToken();
         this.consoleInfo("Client token: ", clientToken);
-        return agent.put(`https://gew-spclient.spotify.com/connect-state/v1/devices/hobs_${this.fakeDeviceId}`)
-            .auth(this.web_auth.access_token, {type: 'bearer'})
-            .set('Content-Type', 'application/json')
-            .set('User-Agent', USER_AGENT)
-            .set('X-Spotify-Connection-Id', this.spotifyConnectionId)
-            .set('Client-Token', clientToken.granted_token.token)
-            .buffer(true) // because content-type isn't set in the response header, we need to get the raw text rather than the (parsed) body
-            .send({
-                member_type: "CONNECT_STATE",
-                device: {device_info: {capabilities: {can_be_player: false, hidden: true, needs_full_player_state: true}}}
-            })
-            .then(resp => {
-                this.consoleInfo("Notification registration response", resp);
-                return JSON.parse(resp.text);
-            })
-            .catch(err => {
-                if (err.statusCode == 429) {
-                    this.consoleError("Too many requests. Swallowing exception", err);
-                }
-                else {
-                    this.consoleError("Failed to register for notifications.", err);
-                    throw err;
-                }
-            });
+        return this.runTask(async () => {
+            return agent.put(`https://gew-spclient.spotify.com/connect-state/v1/devices/hobs_${this.fakeDeviceId}`)
+                .auth(this.web_auth.access_token, {type: 'bearer'})
+                .set('Content-Type', 'application/json')
+                .set('User-Agent', USER_AGENT)
+                .set('X-Spotify-Connection-Id', this.spotifyConnectionId)
+                .set('Client-Token', clientToken.granted_token.token)
+                .buffer(true) // because content-type isn't set in the response header, we need to get the raw text rather than the (parsed) body
+                .send({
+                    member_type: "CONNECT_STATE",
+                    device: {device_info: {capabilities: {can_be_player: false, hidden: true, needs_full_player_state: true}}}
+                })
+                .then(resp => {
+                    this.consoleInfo("Notification registration response", resp);
+                    return JSON.parse(resp.text);
+                })
+                .catch(err => {
+                    if (err.statusCode == 429) {
+                        this.consoleError("Too many requests registering for notifications. Swallowing exception", err);
+                    }
+                    else {
+                        this.consoleError("Failed to register for notifications.", err);
+                        throw err;
+                    }
+                });
+        }, 1, {feature: "registerDeviceForNotifications"});
     }
 
     async getClientToken() {
-        return agent.post("https://clienttoken.spotify.com/v1/clienttoken")
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json')
-            .set('User-Agent', USER_AGENT)
-            .send({
-                "client_data": {
-                    "client_version": "1.2.66.349.gb8b186bd",
-                    "client_id": this.web_auth.client_id,
-                    "js_sdk_data": {
-                        "device_brand": "Apple",
-                        "device_model": "unknown",
-                        "os": "macos",
-                        "os_version": "10.15.7",
-                        "device_id": this.fakeDeviceId,
-                        "device_type": "computer"
+        return this.runTask(async () => {
+            return agent.post("https://clienttoken.spotify.com/v1/clienttoken")
+                .set('Accept', 'application/json')
+                .set('Content-Type', 'application/json')
+                .set('User-Agent', USER_AGENT)
+                .send({
+                    "client_data": {
+                        "client_version": "1.2.66.349.gb8b186bd",
+                        "client_id": this.web_auth.client_id,
+                        "js_sdk_data": {
+                            "device_brand": "Apple",
+                            "device_model": "unknown",
+                            "os": "macos",
+                            "os_version": "10.15.7",
+                            "device_id": this.fakeDeviceId,
+                            "device_type": "computer"
+                        }
                     }
-                }
-            })
-            .then(resp => JSON.parse(resp.text))
-            .catch(err => {
-                this.consoleError("Failed to get client token.", err);
-                throw err;
-            });
+                })
+                .then(resp => JSON.parse(resp.text))
+                .catch(err => {
+                    this.consoleError("Failed to get client token.", err);
+                    throw err;
+                });
+        }, 1, {feature: "getClientToken"});
     }
 
     async resetWebsocket() {
@@ -898,14 +981,14 @@ class Spotify {
                     is_queued: trackDict[track.uri]?.metadata?.is_queued == 'true'
                 }
             };
-            // fetch each track (batch GET /tracks removed Feb 2026); filter out failed lookups
-            let nextTracks = await this.getTracks([
-                playerState.track.uri.substring(playerState.track.uri.lastIndexOf(":") + 1),
+            // Use track data already present in the websocket payload to avoid extra Web API calls.
+            const rawTracks = [
+                playerState.track,
                 ...playerState.next_tracks
                     .filter(t => t.uri.indexOf("spotify:track:") >= 0)
-                    .slice(0, 49)
-                    .map(t => t.uri.substring(t.uri.lastIndexOf(":") + 1))]);
-            nextTracks = nextTracks.filter(Boolean).map(t => getTrackInfo(t));
+                    .slice(0, 19) // limit to 20 tracks total (current + 19 next)
+            ];
+            const nextTracks = rawTracks.map(t => getTrackInfo(t));
             const playlist_context = await this._getCurrentContext(playerState.context_uri);
             this.nowPlaying = {
                 last_updated: Date.now(), // FIXME: this is duplicated with timestamp, do we need both?
@@ -981,16 +1064,71 @@ class Spotify {
         }
     }
 
+    _isRateLimitError(error) {
+        if (!error) {
+            return false;
+        }
+        if (error.statusCode === 429 || error.status === 429) {
+            return true;
+        }
+        if (error.body && error.body.error && error.body.error.status === 429) {
+            return true;
+        }
+        if (error.response && (error.response.statusCode === 429 || error.response.status === 429)) {
+            return true;
+        }
+        return false;
+    }
+
+    _getRetryAfterSeconds(error) {
+        const headers =
+            (error && error.headers) ||
+            (error && error.response && error.response.headers) ||
+            {};
+        const raw = headers['retry-after'] || headers['Retry-After'];
+        let seconds = parseInt(raw || "0", 10);
+        if (Number.isNaN(seconds)) {
+            seconds = 0;
+        }
+        // clamp to reasonable bounds
+        if (seconds < 0) {
+            seconds = 0;
+        }
+        if (seconds > 120) {
+            seconds = 120;
+        }
+        return seconds;
+    }
+
+    _isUnauthorizedError(error) {
+        if (!error) {
+            return false;
+        }
+        if (error.message === "Unauthorized") {
+            return true;
+        }
+        if (error.statusCode === 401 || error.status === 401) {
+            return true;
+        }
+        if (error.body && error.body.error && error.body.error.status === 401) {
+            return true;
+        }
+        if (error.response && (error.response.statusCode === 401 || error.response.status === 401)) {
+            return true;
+        }
+        return false;
+    }
+
     setArtistRadio(artistId) {
-        return this.runTask(() => this._setContextRadio(() => this.api.getArtist(artistId)));
+        return this.runTask(() => this._setContextRadio(() => this.api.getArtist(artistId)), 1, {feature: "setArtistRadio"});
     }
 
     setAlbumRadio(albumId) {
-        return this.runTask(() => this._setContextRadio(() => this.api.getAlbum(albumId)));
+        return this.runTask(() => this._setContextRadio(() => this.api.getAlbum(albumId)), 1, {feature: "setAlbumRadio"});
     }
 
     setPlaylistRadio(playlistId) {
-        return this.runTask(() => this._setContextRadio(() => this.api.getPlaylist(playlistId)));
+        return this.runTask(() => this._setContextRadio(() => this.api.getPlaylist(playlistId)), 1, {feature: "setPlaylistRadio"});
     }
 
     async _setContextRadio(fnRetrieveitem) {
@@ -1008,41 +1146,60 @@ class Spotify {
      * @private
      */
     async _getCurrentContext(contextUri) {
+        if (!this._contextCache) {
+            this._contextCache = {};
+        }
+        const cacheKey = contextUri;
+        const now = Date.now();
+        const ttlMs = parseInt(process.env.SPOTIFY_CONTEXT_CACHE_TTL_MS || "600000", 10); // default 10 minutes
+        const cached = this._contextCache[cacheKey];
+        if (cached && now - cached.timestamp < ttlMs) {
+            return cached.value;
+        }
+
         const is_radio = contextUri.indexOf("radio") >= 0 || contextUri.indexOf("station") >= 0;
         const id = contextUri.substr(contextUri.lastIndexOf(":") + 1);
         if (contextUri.indexOf("playlist") >= 0) {
             const playlist = await this.getPlaylist(id, {fields: "name,description"})
-            return {
+            const value = {
                 type: "playlist" + (is_radio ? " radio" : ""),
                 name: playlist.name,
                 uri: contextUri
             };
+            this._contextCache[cacheKey] = {timestamp: now, value};
+            return value;
         }
         else if (contextUri.indexOf("album") >= 0) {
             const album = await this.getAlbum(id)
-            return {
+            const value = {
                 type: "album" + (is_radio ? " radio" : ""),
                 name: album.name,
                 artists: album.artists.map(a => a.name).join(", "),
                 uri: contextUri
             };
+            this._contextCache[cacheKey] = {timestamp: now, value};
+            return value;
         }
         else if (contextUri.indexOf("artist") >= 0) {
             const artist = await this.getArtist(id)
-            return {
+            const value = {
                 type: "artist" + (is_radio ? " radio" : ""),
                 name: artist.name,
                 uri: contextUri
             };
+            this._contextCache[cacheKey] = {timestamp: now, value};
+            return value;
         }
         else if (contextUri.indexOf("track") >= 0) {
             const track = await this.getTrack(id)
-            return {
+            const value = {
                 type: "track" + (is_radio ? " radio" : ""),
                 name: track.name,
                 artists: track.artists.map(a => a.name).join(', '),
                 uri: contextUri
             };
+            this._contextCache[cacheKey] = {timestamp: now, value};
+            return value;
         }
         this.consoleError("Unable to determine context from URI: " + contextUri)
         return Promise.resolve(null);
