@@ -3,6 +3,7 @@ const useSmallAlbumCover = window.playerConfig?.useSmallAlbumCover ?? false;
 document.addEventListener('alpine:init', x => {
     Alpine.store('player', {
         init() {
+            this.fetchState(); // fetch immediately so UI shows current state without waiting for first interval
             this.pollingLoop();
         },
 

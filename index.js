@@ -31,23 +31,20 @@ app.listen(port, () => {
 });
 
 app.get("/", async (req, res) => {
-    const renderPlaybackState = () => {
-        spotify.getPlaybackState()
-            .then(state => {
-                if (state.body) {
-                    state = state.body;
-                }
-                state.show_playback_controls = process.env.SHOW_PLAYBACK_CONTROLS ?? "true";
-                res.render("playing", state);
-            })
-    }
+    // Render immediately with show_playback_controls; playback data comes from client polling /now-playing.
+    // Do not await getPlaybackState() here — it uses runTask and can block 30–300s on 429, leaving the tab spinning.
+    const renderPlaying = () => {
+        res.render("playing", {
+            show_playback_controls: process.env.SHOW_PLAYBACK_CONTROLS ?? "true"
+        });
+    };
 
     if (spotify.api === undefined) {
         spotify.initializeTokensFromFile()
             .then(() => spotify.resetWebsocket()
                     .then(() => spotify.initWebsocket())
                     .then(() => spotify.initialized())
-                    .then(() => renderPlaybackState())
+                    .then(() => renderPlaying())
                     .catch(err => res.status(500).send({error: err.message}))
                 ,
                 // failed initializeTokensFromFile()
@@ -71,7 +68,7 @@ app.get("/", async (req, res) => {
             });
     }
     else {
-        renderPlaybackState();
+        renderPlaying();
     }
 });
 

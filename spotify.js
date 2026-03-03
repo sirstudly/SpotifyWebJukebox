@@ -10,13 +10,41 @@ const errorLog = require('./logger').errorlogger;
 const infoLog = require('./logger').infoLogger;
 const USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0';
 const TOKENS_FILE = 'tokens.json';
+// Pathfinder (api-partner) internal API – see PATHFINDER-PLAYLIST.md
+const PATHFINDER_QUERY_URL = 'https://api-partner.spotify.com/pathfinder/v2/query';
+// Persisted-query hash: copied from HAR (POST body extensions.persistedQuery.sha256Hash).
+// It is the SHA-256 of the GraphQL query document; we don't have that document, so we use the
+// hash observed from the Web Player. Same hash is used for fetchPlaylist / fetchPlaylistContents.
+const PATHFINDER_PLAYLIST_QUERY_HASH = '9c53fb83f35c6a177be88bf1b67cb080b853e86b576ed174216faa8f9164fc8f';
+const SPOTIFY_WEB_APP_VERSION = '1.2.85.334.g6a4891e1';
 dotenv.config();
 
 class Spotify {
 
-    // (re)attempt a task, a given number of times
+    // Short TTL cache for track bodies to cut API calls on song rollover (next -> current often already fetched).
+    _trackCache = new Map();
+    _trackCacheTTLMs = 60000;
+    _rateLimitedUntil = 0;
+    _runTaskQueue = Promise.resolve();
+
+    // (re)attempt a task, a given number of times. On 429, honors Retry-After header.
+    // Serialized so only one task runs at a time; avoids burst retries that trigger 86400 (24h) limits.
     async runTask(task, limit = 1) {
-        return task().catch(async(e) => {
+        return new Promise((resolve, reject) => {
+            this._runTaskQueue = this._runTaskQueue.then(() =>
+                this._runTaskOnce(task, limit).then(resolve, reject)
+            );
+        });
+    }
+
+    async _runTaskOnce(task, limit) {
+        const now = Date.now();
+        if (now < this._rateLimitedUntil) {
+            const waitMs = this._rateLimitedUntil - now;
+            this.consoleInfo(`Rate limit cooldown: waiting ${Math.round(waitMs / 1000)}s before request.`);
+            await this.sleep(waitMs);
+        }
+        return task().catch(async (e) => {
             this.consoleError(`Attempt failed, ${limit} tries remaining.`, e);
             if (e.message == "Unauthorized") {
                 this.consoleInfo("Unauthorized? Refreshing auth token...");
@@ -26,9 +54,34 @@ class Spotify {
                 this.consoleError("Too many attempts. Giving up.");
                 throw e;
             }
-            await this.sleep(2000);
-            return this.runTask(task, limit - 1);
-        })
+            let waitMs = 2000;
+            if (e.statusCode === 429) {
+                const headers = e.headers || e.response?.headers || {};
+                const raw = headers['retry-after'] || headers['Retry-After'];
+                const seconds = raw != null ? parseInt(String(raw), 10) : NaN;
+                const RETRY_AFTER_DEFAULT_SEC = 30;
+                const RETRY_AFTER_MIN_SEC = 1;
+                const RETRY_AFTER_MAX_SEC = 300;
+                const RETRY_AFTER_NO_RETRY_SEC = 3600;
+                if (!Number.isNaN(seconds) && seconds >= RETRY_AFTER_NO_RETRY_SEC) {
+                    this._rateLimitedUntil = Math.max(this._rateLimitedUntil, Date.now() + Math.min(seconds, RETRY_AFTER_MAX_SEC) * 1000);
+                    this.consoleError(`Rate limited (429); Retry-After ${seconds}s — not retrying this request. Backing off until ${new Date(this._rateLimitedUntil).toISOString()}.`);
+                    throw e;
+                }
+                const sec = !Number.isNaN(seconds) && seconds >= 0
+                    ? Math.min(RETRY_AFTER_MAX_SEC, Math.max(RETRY_AFTER_MIN_SEC, seconds))
+                    : RETRY_AFTER_DEFAULT_SEC;
+                waitMs = sec * 1000;
+                this._rateLimitedUntil = Math.max(this._rateLimitedUntil, Date.now() + waitMs);
+                if (seconds > RETRY_AFTER_MAX_SEC) {
+                    this.consoleInfo(`Rate limited (429); long cooldown (${seconds}s). Backing off until ${new Date(this._rateLimitedUntil).toISOString()}.`);
+                }
+                this.consoleInfo(`Rate limited (429); waiting ${sec}s before retry (Retry-After: ${raw ?? 'none'}).`);
+            }
+            await this.sleep(waitMs);
+            const nextLimit = (e.statusCode === 429 && limit === 1) ? 1 : limit - 1;
+            return this._runTaskOnce(task, nextLimit);
+        });
     }
 
     getAuthorizeUrl() {
@@ -338,16 +391,77 @@ class Spotify {
         if (!this.isWebAuthTokenValid()) {
             await this.refreshWebAuthToken();
         }
-        // 2025-07-21: Spotify curated playlists will fail with a 404 using the normal access token
-        return await this.api.getPlaylistWithToken(playlistId, this.web_auth.access_token, options)
-            .then(resp => resp.body)
-            .catch(err => {
+        const fallback = (err) => ({
+            name: "Unable to load",
+            description: "GetPlaylist error: " + (err && err.message ? err.message : String(err)),
+        });
+        try {
+            const resp = await this.api.getPlaylist(playlistId, options || {});
+            return resp.body;
+        } catch (err) {
+            if (err.statusCode !== 404) {
                 this.consoleError("Error on getPlaylist: " + playlistId, err);
-                return {
-                    "name": "Unable to load",
-                    "description": "GetPlaylist error: " + err.message,
-                };
-            })
+            }
+            try {
+                const body = await this.getPlaylistViaPathfinder(playlistId);
+                const name = Spotify.getPlaylistNameFromPathfinderResponse(body);
+                if (name) return { name, description: "" };
+            } catch (err2) {
+                this.consoleError("Pathfinder fallback failed for playlist: " + playlistId, err2);
+            }
+            return fallback(err);
+        }
+    }
+
+    /**
+     * Fetch playlist metadata (e.g. name) via internal Pathfinder API (api-partner.spotify.com).
+     * Use when the official Web API returns 404 for some Spotify-owned/editorial playlists.
+     * See PATHFINDER-PLAYLIST.md for request format. Returns raw GraphQL-style response;
+     * use getPlaylistNameViaPathfinder() for just the name string.
+     */
+    async getPlaylistViaPathfinder(playlistId) {
+        if (!this.isWebAuthTokenValid()) {
+            await this.refreshWebAuthToken();
+        }
+        const clientToken = await this.getClientToken();
+        const uri = playlistId.startsWith('spotify:playlist:') ? playlistId : `spotify:playlist:${playlistId}`;
+        const body = {
+            variables: { uri, offset: 0, limit: 25, enableWatchFeedEntrypoint: true },
+            operationName: 'fetchPlaylist',
+            extensions: {
+                persistedQuery: { version: 1, sha256Hash: PATHFINDER_PLAYLIST_QUERY_HASH }
+            }
+        };
+        return this.runTask(() =>
+            agent.post(PATHFINDER_QUERY_URL)
+                .set('Content-Type', 'application/json;charset=UTF-8')
+                .set('Authorization', 'Bearer ' + this.web_auth.access_token)
+                .set('client-token', clientToken.granted_token.token)
+                .set('app-platform', 'WebPlayer')
+                .set('spotify-app-version', SPOTIFY_WEB_APP_VERSION)
+                .set('Origin', 'https://open.spotify.com')
+                .set('Referer', 'https://open.spotify.com/')
+                .set('User-Agent', USER_AGENT)
+                .send(body)
+                .then(resp => resp.body)
+        );
+    }
+
+    /**
+     * Get playlist name from Pathfinder response. Handles common response shapes.
+     * @param {object} pathfinderBody - Response from getPlaylistViaPathfinder()
+     * @returns {string|null} Playlist name or null if not found
+     */
+    static getPlaylistNameFromPathfinderResponse(pathfinderBody) {
+        if (!pathfinderBody || typeof pathfinderBody !== 'object') return null;
+        const d = pathfinderBody.data;
+        if (!d) return null;
+        // playlistV2.data.name (common in Web Player)
+        const pv2 = d.playlistV2?.data ?? d.playlistV2;
+        if (pv2?.name) return pv2.name;
+        if (d.fetchPlaylist?.name) return d.fetchPlaylist.name;
+        if (d.playlist?.name) return d.playlist.name;
+        return null;
     }
 
     async getTrack(trackId) {
@@ -369,17 +483,51 @@ class Spotify {
 
     /**
      * Fetch multiple tracks by ID. Uses GET /tracks/{id} per track (batch GET /tracks removed in Feb 2026).
+     * Uses short-TTL cache to avoid re-fetching on song rollover; throttled in batches.
      */
     async getTracks(trackIds) {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        const results = await Promise.all(
-            trackIds.map(id =>
-                this.api.getTrack(id).then(r => r.body).catch(() => null)
-            )
-        );
-        return results;
+        const now = Date.now();
+        const toFetch = [];
+        const results = new Array(trackIds.length);
+        for (let i = 0; i < trackIds.length; i++) {
+            const id = trackIds[i];
+            const entry = this._trackCache.get(id);
+            if (entry && entry.expiresAt > now) {
+                results[i] = entry.body;
+            } else {
+                toFetch.push({ id, index: i });
+            }
+        }
+        if (toFetch.length === 0) {
+            return results;
+        }
+        const BATCH_SIZE = 4;
+        const BATCH_DELAY_MS = 150;
+        const expiresAt = now + this._trackCacheTTLMs;
+        return this.runTask(async () => {
+            for (let i = 0; i < toFetch.length; i += BATCH_SIZE) {
+                const batch = toFetch.slice(i, i + BATCH_SIZE);
+                const batchResults = await Promise.all(
+                    batch.map(({ id }) =>
+                        this.api.getTrack(id).then(r => r.body).catch(() => null)
+                    )
+                );
+                batch.forEach(({ id, index }, j) => {
+                    const body = batchResults[j];
+                    results[index] = body;
+                    if (body) {
+                        this._trackCache.set(id, { body, expiresAt });
+                    }
+                });
+                if (i + BATCH_SIZE < toFetch.length) {
+                    await this.sleep(BATCH_DELAY_MS);
+                }
+            }
+            return results;
+        });
     }
 
     async getAlbum(albumId) {
@@ -844,7 +992,12 @@ class Spotify {
                     // this should now trigger events
                     await this.registerFakeDevice()
                         .then(() => this.registerDeviceForNotifications())
-                        .then(resp => this._updateNowPlaying(resp.player_state))
+                        .then(resp => {
+                            if (resp && resp.player_state && resp.player_state.track && resp.player_state.next_tracks) {
+                                return this._updateNowPlaying(resp.player_state);
+                            }
+                            return this._updateNowPlayingFromPlaybackState();
+                        })
                         .catch(err => {
                             if (err.statusCode == 429) {
                                 this.consoleError("Too many requests. Swallowing exception", err);
@@ -875,62 +1028,152 @@ class Spotify {
     }
 
     /**
+     * Populates this.nowPlaying from the Web API playback state when the WS registration response has no player_state.
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _updateNowPlayingFromPlaybackState() {
+        try {
+            const playback = await this.getPlaybackState();
+            if (!playback || !playback.body || !playback.body.item) {
+                this.consoleInfo("No playback state or item; now playing not updated.");
+                return;
+            }
+            const item = playback.body.item;
+            this.nowPlaying = {
+                last_updated: Date.now(),
+                timestamp: playback.body.timestamp || Date.now(),
+                is_playing: !!playback.body.is_playing,
+                progress_ms: playback.body.progress_ms || 0,
+                duration_ms: item.duration_ms || 0,
+                now_playing: {
+                    id: item.id,
+                    uri: item.uri,
+                    song_title: item.name,
+                    artist: (item.artists || []).map(a => a.name).join(', '),
+                    album: item.album ? { id: item.album.id, images: item.album.images || [], name: item.album.name } : {}
+                },
+                next_track: null,
+                queued_tracks: [],
+                playlist_tracks: [],
+                context: this.nowPlaying?.context ?? null,
+                context_title: this.nowPlaying?.context_title || ''
+            };
+            this.consoleInfo("Now Playing (from playback state):", this.nowPlaying);
+        } catch (err) {
+            this.consoleError("Failed to update now playing from playback state:", err);
+        }
+    }
+
+    /**
      * Updates this.nowPlaying with the currently playing/queued and context.
+     * Sets UI immediately from playerState so the UI stays responsive on song rollover; then enriches in background.
      * @param playerState Object
      * @returns {Promise<void>}
      * @private
      */
     async _updateNowPlaying(playerState) {
-        if (playerState && playerState.track && playerState.next_tracks) {
-            const trackDict = []; // create a track dictionary keyed on uri
-            playerState.next_tracks.forEach(t => trackDict[t.uri] = t);
-            const getTrackInfo = (track) => {
-                return {
-                    id: track.id,
-                    uri: track.uri,
-                    song_title: track.name,
-                    artist: track.artists.map(a => a.name).join(', '),
-                    album: {
-                        id: track.album.id,
-                        images: track.album.images,
-                        name: track.album.name
-                    },
-                    is_queued: trackDict[track.uri]?.metadata?.is_queued == 'true'
-                }
+        if (!playerState || !playerState.track || !playerState.next_tracks) {
+            this.consoleInfo("No track information found in player state. Now playing not updated.");
+            return;
+        }
+        const trackDict = [];
+        playerState.next_tracks.forEach(t => trackDict[t.uri] = t);
+        // WebSocket/Connect payload uses ContextTrack: { uri, uid?, metadata? }. Display fields are in metadata
+        // (metadata.title, metadata.artist_uri, metadata.album_title). Full Web API track has name, artists, album.
+        const getTrackInfo = (track) => {
+            const meta = track.metadata || {};
+            const id = track.id ?? (track.uri ? track.uri.substring(track.uri.lastIndexOf(':') + 1) : null);
+            const song_title = track.name ?? meta.title ?? '';
+            const artist = track.artists?.length
+                ? track.artists.map(a => a.name).join(', ')
+                : (meta.artist_name ?? '');
+            const albumName = track.album?.name ?? meta.album_title ?? '';
+            const albumId = track.album?.id ?? (meta.album_uri ? meta.album_uri.substring(meta.album_uri.lastIndexOf(':') + 1) : null);
+            return {
+                id,
+                uri: track.uri,
+                song_title,
+                artist,
+                album: (albumName || albumId) ? { id: albumId, images: track.album?.images ?? [], name: albumName } : {},
+                is_queued: trackDict[track.uri]?.metadata?.is_queued == 'true'
             };
-            // fetch each track (batch GET /tracks removed Feb 2026); filter out failed lookups
-            let nextTracks = await this.getTracks([
-                playerState.track.uri.substring(playerState.track.uri.lastIndexOf(":") + 1),
-                ...playerState.next_tracks
-                    .filter(t => t.uri.indexOf("spotify:track:") >= 0)
-                    .slice(0, 49)
-                    .map(t => t.uri.substring(t.uri.lastIndexOf(":") + 1))]);
-            nextTracks = nextTracks.filter(Boolean).map(t => getTrackInfo(t));
-            const playlist_context = await this._getCurrentContext(playerState.context_uri);
+        };
+        const minimalNowPlaying = getTrackInfo(playerState.track);
+        const contextTitleSuffix = (ctx) => !ctx ? '' : (ctx.name || '')
+            + (ctx.type == "playlist" ? " Playlist" : "")
+            + (ctx.type == "playlist radio" ? " Playlist Radio" : "")
+            + (ctx.type == "album" ? " by " + (ctx.artists || '') : "")
+            + (ctx.type == "track radio" ? " Track Radio" : "")
+            + (ctx.type == "album radio" ? " Album Radio" : "")
+            + (ctx.type == "artist radio" ? " Radio" : "");
+
+        this._updateNowPlayingGeneration = (this._updateNowPlayingGeneration || 0) + 1;
+        const gen = this._updateNowPlayingGeneration;
+
+        this.nowPlaying = {
+            last_updated: Date.now(),
+            timestamp: parseInt(playerState.timestamp),
+            is_playing: !playerState.is_paused,
+            progress_ms: parseInt(playerState.position_as_of_timestamp),
+            duration_ms: parseInt(playerState.duration),
+            now_playing: minimalNowPlaying,
+            next_track: null,
+            queued_tracks: [],
+            playlist_tracks: [],
+            context: this.nowPlaying?.context ?? null,
+            context_title: (this.nowPlaying?.context_title) || ''
+        };
+        this.consoleInfo("Now Playing:", this.nowPlaying);
+
+        // If we have artist_uri but no artist name yet, fetch artist in background and patch
+        const meta = playerState.track.metadata || {};
+        if (minimalNowPlaying.artist === '' && meta.artist_uri) {
+            const artistId = meta.artist_uri.substring(meta.artist_uri.lastIndexOf(':') + 1);
+            this.getArtist(artistId)
+                .then((artistBody) => {
+                    if (this._updateNowPlayingGeneration === gen && this.nowPlaying?.now_playing) {
+                        this.nowPlaying = {
+                            ...this.nowPlaying,
+                            now_playing: { ...this.nowPlaying.now_playing, artist: artistBody.name }
+                        };
+                    }
+                })
+                .catch(() => {});
+        }
+
+        const nextIds = playerState.next_tracks
+            .filter(t => t.uri && t.uri.indexOf("spotify:track:") >= 0)
+            .slice(0, 19)
+            .map(t => t.uri.substring(t.uri.lastIndexOf(":") + 1));
+        const trackIds = [
+            playerState.track.uri.substring(playerState.track.uri.lastIndexOf(":") + 1),
+            ...nextIds
+        ];
+
+        Promise.all([
+            this.getTracks(trackIds),
+            this._getCurrentContext(playerState.context_uri)
+        ]).then(([trackBodies, playlist_context]) => {
+            if (gen !== this._updateNowPlayingGeneration) return;
+            const nextTracks = trackBodies.filter(Boolean).map(t => getTrackInfo(t));
             this.nowPlaying = {
-                last_updated: Date.now(), // FIXME: this is duplicated with timestamp, do we need both?
+                last_updated: Date.now(),
                 timestamp: parseInt(playerState.timestamp),
                 is_playing: !playerState.is_paused,
                 progress_ms: parseInt(playerState.position_as_of_timestamp),
                 duration_ms: parseInt(playerState.duration),
-                now_playing: nextTracks[0],
-                next_track: nextTracks[1],
-                queued_tracks: nextTracks.slice(1).filter(t => t.is_queued), // show all queued tracks
-                playlist_tracks: nextTracks.slice(1).filter(t => !t.is_queued).slice(0, 20), // show max 20 playlist tracks
+                now_playing: nextTracks[0] || minimalNowPlaying,
+                next_track: nextTracks[1] || null,
+                queued_tracks: nextTracks.slice(1).filter(t => t.is_queued),
+                playlist_tracks: nextTracks.slice(1).filter(t => !t.is_queued).slice(0, 20),
                 context: playlist_context,
-                context_title: playlist_context.name
-                    + (playlist_context.type == "playlist" ? " Playlist" : "")
-                    + (playlist_context.type == "playlist radio" ? " Playlist Radio" : "")
-                    + (playlist_context.type == "album" ? " by " + playlist_context.artists : "")
-                    + (playlist_context.type == "track radio" ? " Track Radio" : "")
-                    + (playlist_context.type == "album radio" ? " Album Radio" : "")
-                    + (playlist_context.type == "artist radio" ? " Radio" : "")
+                context_title: playlist_context ? contextTitleSuffix(playlist_context) : ''
             };
-            this.consoleInfo("Now Playing:", this.nowPlaying);
-        }
-        else {
-            this.consoleInfo("No track information found in player state. Now playing not updated.");
-        }
+            this.consoleInfo("Now Playing (enriched):", this.nowPlaying);
+        }).catch(err => {
+            this.consoleError("Enrich now-playing failed (UI already updated):", err);
+        });
     }
 
     /**
