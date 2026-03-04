@@ -388,8 +388,8 @@ class Spotify {
     }
 
     async getPlaylist(playlistId, options) {
-        if (!this.isWebAuthTokenValid()) {
-            await this.refreshWebAuthToken();
+        if (!this.isAuthTokenValid()) {
+            await this.refreshAuthToken();
         }
         const fallback = (err) => ({
             name: "Unable to load",
