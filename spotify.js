@@ -29,15 +29,16 @@ class Spotify {
 
     // (re)attempt a task, a given number of times. On 429, honors Retry-After header.
     // Serialized so only one task runs at a time; avoids burst retries that trigger 86400 (24h) limits.
-    async runTask(task, limit = 1) {
+    async runTask(task, limit = 1, taskName = '') {
+        const name = taskName || 'runTask';
         return new Promise((resolve, reject) => {
             this._runTaskQueue = this._runTaskQueue.then(() =>
-                this._runTaskOnce(task, limit).then(resolve, reject)
+                this._runTaskOnce(task, limit, name).then(resolve, reject)
             );
         });
     }
 
-    async _runTaskOnce(task, limit) {
+    async _runTaskOnce(task, limit, taskName = '') {
         const now = Date.now();
         if (now < this._rateLimitedUntil) {
             const waitMs = this._rateLimitedUntil - now;
@@ -45,7 +46,7 @@ class Spotify {
             await this.sleep(waitMs);
         }
         return task().catch(async (e) => {
-            this.consoleError(`Attempt failed, ${limit} tries remaining.`, e);
+            this.consoleError(`Attempt failed (${taskName}), ${limit} tries remaining.`, e);
             if (e.message == "Unauthorized") {
                 this.consoleInfo("Unauthorized? Refreshing auth token...");
                 await this.refreshAuthToken();
@@ -65,7 +66,7 @@ class Spotify {
                 const RETRY_AFTER_NO_RETRY_SEC = 3600;
                 if (!Number.isNaN(seconds) && seconds >= RETRY_AFTER_NO_RETRY_SEC) {
                     this._rateLimitedUntil = Math.max(this._rateLimitedUntil, Date.now() + Math.min(seconds, RETRY_AFTER_MAX_SEC) * 1000);
-                    this.consoleError(`Rate limited (429); Retry-After ${seconds}s — not retrying this request. Backing off until ${new Date(this._rateLimitedUntil).toISOString()}.`);
+                    this.consoleError(`Rate limited (429) [${taskName}]; Retry-After ${seconds}s — not retrying. Backing off until ${new Date(this._rateLimitedUntil).toISOString()}.`);
                     throw e;
                 }
                 const sec = !Number.isNaN(seconds) && seconds >= 0
@@ -74,13 +75,13 @@ class Spotify {
                 waitMs = sec * 1000;
                 this._rateLimitedUntil = Math.max(this._rateLimitedUntil, Date.now() + waitMs);
                 if (seconds > RETRY_AFTER_MAX_SEC) {
-                    this.consoleInfo(`Rate limited (429); long cooldown (${seconds}s). Backing off until ${new Date(this._rateLimitedUntil).toISOString()}.`);
+                    this.consoleInfo(`Rate limited (429) [${taskName}]; long cooldown (${seconds}s). Backing off until ${new Date(this._rateLimitedUntil).toISOString()}.`);
                 }
-                this.consoleInfo(`Rate limited (429); waiting ${sec}s before retry (Retry-After: ${raw ?? 'none'}).`);
+                this.consoleInfo(`Rate limited (429) [${taskName}]; waiting ${sec}s before retry (Retry-After: ${raw ?? 'none'}).`);
             }
             await this.sleep(waitMs);
             const nextLimit = (e.statusCode === 429 && limit === 1) ? 1 : limit - 1;
-            return this._runTaskOnce(task, nextLimit);
+            return this._runTaskOnce(task, nextLimit, taskName);
         });
     }
 
@@ -402,10 +403,14 @@ class Spotify {
             if (err.statusCode !== 404) {
                 this.consoleError("Error on getPlaylist: " + playlistId, err);
             }
+            this.consoleInfo("getPlaylist failed for " + playlistId + " (status " + (err.statusCode ?? '?') + "), trying Pathfinder fallback.");
             try {
                 const body = await this.getPlaylistViaPathfinder(playlistId);
                 const name = Spotify.getPlaylistNameFromPathfinderResponse(body);
-                if (name) return { name, description: "" };
+                if (name) {
+                    this.consoleInfo("getPlaylist Pathfinder fallback succeeded for " + playlistId + ": " + name);
+                    return { name, description: "" };
+                }
             } catch (err2) {
                 this.consoleError("Pathfinder fallback failed for playlist: " + playlistId, err2);
             }
@@ -444,7 +449,7 @@ class Spotify {
                 .set('User-Agent', USER_AGENT)
                 .send(body)
                 .then(resp => resp.body)
-        );
+        , 1, 'getPlaylistViaPathfinder');
     }
 
     /**
@@ -527,7 +532,7 @@ class Spotify {
                 }
             }
             return results;
-        });
+        }, 1, 'getTracks');
     }
 
     async getAlbum(albumId) {
@@ -547,7 +552,7 @@ class Spotify {
         return this.runTask(async () => {
             const result = await this.api.getArtist(artistId);
             return result.body;
-        });
+        }, 1, 'getArtist');
     }
 
     async getArtistAlbums(artistId, skip = 0, limit = 10) {
@@ -596,7 +601,7 @@ class Spotify {
         }
         return await this.runTask(() => {
             return this.api.getMyCurrentPlaybackState();
-        });
+        }, 1, 'getPlaybackState');
     }
 
     async getLyrics() {
@@ -1126,9 +1131,9 @@ class Spotify {
         };
         this.consoleInfo("Now Playing:", this.nowPlaying);
 
-        // If we have artist_uri but no artist name yet, fetch artist in background and patch
+        // If we have artist_uri but no artist name yet, fetch artist in background and patch (skip when rate limited)
         const meta = playerState.track.metadata || {};
-        if (minimalNowPlaying.artist === '' && meta.artist_uri) {
+        if (minimalNowPlaying.artist === '' && meta.artist_uri && Date.now() >= this._rateLimitedUntil) {
             const artistId = meta.artist_uri.substring(meta.artist_uri.lastIndexOf(':') + 1);
             this.getArtist(artistId)
                 .then((artistBody) => {
