@@ -30,8 +30,6 @@ class Spotify {
     // Playlist context cache (name/description) to avoid repeated getPlaylist on same playlist across song changes.
     _playlistContextCache = new Map();
     _playlistContextCacheTTLMs = 300000; // 5 min
-    // When set, skip Web API getPlaylist and use Pathfinder/cache only (avoids hammering after 429 / 86400 ban).
-    _playlistRateLimitedUntil = 0;
 
     // (re)attempt a task, a given number of times. On 429, honors Retry-After header.
     // Serialized so only one task runs at a time; avoids burst retries that trigger 86400 (24h) limits.
@@ -405,42 +403,15 @@ class Spotify {
         const now = Date.now();
         const id = String(playlistId).replace(/^spotify:playlist:/, '');
 
-        // If we're in playlist rate-limit cooldown, skip Web API and use cache or Pathfinder only.
-        if (now < this._playlistRateLimitedUntil) {
-            const cached = this._playlistContextCache.get(id);
-            if (cached && cached.expiresAt > now) {
-                return cached.body;
-            }
-            this.consoleInfo("getPlaylist: in cooldown until " + new Date(this._playlistRateLimitedUntil).toISOString() + ", using Pathfinder.");
-            try {
-                const body = await this.getPlaylistViaPathfinder(playlistId);
-                const name = Spotify.getPlaylistNameFromPathfinderResponse(body);
-                if (name) {
-                    const result = { name, description: "" };
-                    this._playlistContextCache.set(id, { body: result, expiresAt: now + this._playlistContextCacheTTLMs });
-                    return result;
-                }
-            } catch (err2) {
-                this.consoleError("Pathfinder fallback failed for playlist: " + playlistId, err2);
-            }
-            return fallback({ statusCode: 429, message: "Rate limited (playlist); cooldown active." });
-        }
-
         try {
-            const resp = await this.api.getPlaylist(playlistId, options || {});
-            const body = resp.body;
+            const body = await this.runTask(
+                () => this.api.getPlaylist(playlistId, options || {}).then(r => r.body),
+                1,
+                'getPlaylist'
+            );
             this._playlistContextCache.set(id, { body, expiresAt: now + this._playlistContextCacheTTLMs });
             return body;
         } catch (err) {
-            if (err.statusCode === 429) {
-                const raw = err.headers?.['retry-after'] ?? err.headers?.['Retry-After'];
-                const seconds = raw != null ? parseInt(String(raw), 10) : NaN;
-                if (!Number.isNaN(seconds) && seconds > 0) {
-                    const capMs = Math.min(seconds * 1000, 3600 * 1000); // cap backoff at 1h
-                    this._playlistRateLimitedUntil = Date.now() + capMs;
-                    this.consoleError("getPlaylist 429; backing off Web API until " + new Date(this._playlistRateLimitedUntil).toISOString() + " (Retry-After: " + seconds + "s).");
-                }
-            }
             if (err.statusCode !== 404) {
                 this.consoleError("Error on getPlaylist: " + playlistId, err);
             }
