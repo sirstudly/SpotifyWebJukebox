@@ -27,6 +27,12 @@ class Spotify {
     _rateLimitedUntil = 0;
     _runTaskQueue = Promise.resolve();
 
+    // Playlist context cache (name/description) to avoid repeated getPlaylist on same playlist across song changes.
+    _playlistContextCache = new Map();
+    _playlistContextCacheTTLMs = 300000; // 5 min
+    // When set, skip Web API getPlaylist and use Pathfinder/cache only (avoids hammering after 429 / 86400 ban).
+    _playlistRateLimitedUntil = 0;
+
     // (re)attempt a task, a given number of times. On 429, honors Retry-After header.
     // Serialized so only one task runs at a time; avoids burst retries that trigger 86400 (24h) limits.
     async runTask(task, limit = 1, taskName = '') {
@@ -396,10 +402,45 @@ class Spotify {
             name: "Unable to load",
             description: "GetPlaylist error: " + (err && err.message ? err.message : String(err)),
         });
+        const now = Date.now();
+        const id = String(playlistId).replace(/^spotify:playlist:/, '');
+
+        // If we're in playlist rate-limit cooldown, skip Web API and use cache or Pathfinder only.
+        if (now < this._playlistRateLimitedUntil) {
+            const cached = this._playlistContextCache.get(id);
+            if (cached && cached.expiresAt > now) {
+                return cached.body;
+            }
+            this.consoleInfo("getPlaylist: in cooldown until " + new Date(this._playlistRateLimitedUntil).toISOString() + ", using Pathfinder.");
+            try {
+                const body = await this.getPlaylistViaPathfinder(playlistId);
+                const name = Spotify.getPlaylistNameFromPathfinderResponse(body);
+                if (name) {
+                    const result = { name, description: "" };
+                    this._playlistContextCache.set(id, { body: result, expiresAt: now + this._playlistContextCacheTTLMs });
+                    return result;
+                }
+            } catch (err2) {
+                this.consoleError("Pathfinder fallback failed for playlist: " + playlistId, err2);
+            }
+            return fallback({ statusCode: 429, message: "Rate limited (playlist); cooldown active." });
+        }
+
         try {
             const resp = await this.api.getPlaylist(playlistId, options || {});
-            return resp.body;
+            const body = resp.body;
+            this._playlistContextCache.set(id, { body, expiresAt: now + this._playlistContextCacheTTLMs });
+            return body;
         } catch (err) {
+            if (err.statusCode === 429) {
+                const raw = err.headers?.['retry-after'] ?? err.headers?.['Retry-After'];
+                const seconds = raw != null ? parseInt(String(raw), 10) : NaN;
+                if (!Number.isNaN(seconds) && seconds > 0) {
+                    const capMs = Math.min(seconds * 1000, 3600 * 1000); // cap backoff at 1h
+                    this._playlistRateLimitedUntil = Date.now() + capMs;
+                    this.consoleError("getPlaylist 429; backing off Web API until " + new Date(this._playlistRateLimitedUntil).toISOString() + " (Retry-After: " + seconds + "s).");
+                }
+            }
             if (err.statusCode !== 404) {
                 this.consoleError("Error on getPlaylist: " + playlistId, err);
             }
@@ -409,7 +450,9 @@ class Spotify {
                 const name = Spotify.getPlaylistNameFromPathfinderResponse(body);
                 if (name) {
                     this.consoleInfo("getPlaylist Pathfinder fallback succeeded for " + playlistId + ": " + name);
-                    return { name, description: "" };
+                    const result = { name, description: "" };
+                    this._playlistContextCache.set(id, { body: result, expiresAt: now + this._playlistContextCacheTTLMs });
+                    return result;
                 }
             } catch (err2) {
                 this.consoleError("Pathfinder fallback failed for playlist: " + playlistId, err2);
@@ -1259,7 +1302,16 @@ class Spotify {
         const is_radio = contextUri.indexOf("radio") >= 0 || contextUri.indexOf("station") >= 0;
         const id = contextUri.substr(contextUri.lastIndexOf(":") + 1);
         if (contextUri.indexOf("playlist") >= 0) {
-            const playlist = await this.getPlaylist(id, {fields: "name,description"})
+            const now = Date.now();
+            const cached = this._playlistContextCache.get(id);
+            if (cached && cached.expiresAt > now) {
+                return {
+                    type: "playlist" + (is_radio ? " radio" : ""),
+                    name: cached.body.name,
+                    uri: contextUri
+                };
+            }
+            const playlist = await this.getPlaylist(id, {fields: "name,description"});
             return {
                 type: "playlist" + (is_radio ? " radio" : ""),
                 name: playlist.name,
