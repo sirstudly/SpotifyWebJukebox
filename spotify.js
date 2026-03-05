@@ -406,7 +406,7 @@ class Spotify {
         try {
             const body = await this.runTask(
                 () => this.api.getPlaylist(playlistId, options || {}).then(r => r.body),
-                1,
+                0,
                 'getPlaylist'
             );
             this._playlistContextCache.set(id, { body, expiresAt: now + this._playlistContextCacheTTLMs });
