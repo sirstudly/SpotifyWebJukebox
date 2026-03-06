@@ -36,9 +36,11 @@ class Spotify {
     async runTask(task, limit = 1, taskName = '') {
         const name = taskName || 'runTask';
         return new Promise((resolve, reject) => {
-            this._runTaskQueue = this._runTaskQueue.then(() =>
-                this._runTaskOnce(task, limit, name).then(resolve, reject)
-            );
+            this._runTaskQueue = this._runTaskQueue
+                .catch(() => {}) // keep queue runnable so next task runs after a rejection
+                .then(() =>
+                    this._runTaskOnce(task, limit, name).then(resolve, reject)
+                );
         });
     }
 
@@ -50,6 +52,7 @@ class Spotify {
             await this.sleep(waitMs);
         }
         return task().catch(async (e) => {
+            if (e.statusCode === 404) throw e; // pass through so caller can try Pathfinder etc. without retry or generic log
             this.consoleError(`Attempt failed (${taskName}), ${limit} tries remaining.`, e);
             if (e.message == "Unauthorized") {
                 this.consoleInfo("Unauthorized? Refreshing auth token...");
