@@ -1177,8 +1177,12 @@ class Spotify {
             this.getTracks(trackIds),
             this._getCurrentContext(playerState.context_uri)
         ]).then(([trackBodies, playlist_context]) => {
-            if (gen !== this._updateNowPlayingGeneration) return;
             const nextTracks = trackBodies.filter(Boolean).map(t => getTrackInfo(t));
+            const enrichedTrackId = nextTracks[0]?.id;
+            const currentTrackId = this.nowPlaying?.now_playing?.id;
+            const genMatches = gen === this._updateNowPlayingGeneration;
+            const sameTrack = enrichedTrackId && currentTrackId === enrichedTrackId;
+            if (!genMatches && !sameTrack) return; // stale: different track already playing
             this.nowPlaying = {
                 last_updated: Date.now(),
                 timestamp: parseInt(playerState.timestamp),
