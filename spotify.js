@@ -669,12 +669,11 @@ class Spotify {
         if (this.isTrackQueued(trackURI)) {
             throw new Error("Track already queued.");
         }
-        return this.runTask(async () => {
-            await this._verifyPlaybackState();
-            const result = await this.api.addToQueue(trackURI);
-            this.consoleInfo("Queued track response:", result);
-            return result;
-        });
+        // Don't use runTask so queue requests aren't stuck behind getPlaylist/getTracks
+        await this._verifyPlaybackState();
+        const result = await this.api.addToQueue(trackURI);
+        this.consoleInfo("Queued track response:", result);
+        return result;
     }
 
     isTrackQueued(trackUri) {
