@@ -24,7 +24,8 @@ class Spotify {
     // Track cache (getTracks bodies) — metadata is effectively immutable like artist/album.
     _trackCache = new Map();
     _trackCacheTTLMs = 86400000; // 24 h
-    _rateLimitedUntil = 0;
+    /** Global cooldown: when a 429 has Retry-After >= 1h we set this; all runTask calls wait until after this time. Spotify rate limit is app-wide (rolling 30s), so one shared cooldown is correct. */
+    _apiRateLimitedUntil = 0;
     _runTaskQueue = Promise.resolve();
 
     // Playlist context cache (name/description) to avoid repeated getPlaylist on same playlist across song changes.
@@ -39,8 +40,20 @@ class Spotify {
     _albumCache = new Map();
     _albumCacheTTLMs = 86400000; // 24 h — album metadata effectively immutable
 
-    // (re)attempt a task, a given number of times. On 429, honors Retry-After header.
-    // Serialized so only one task runs at a time; avoids burst retries that trigger 86400 (24h) limits.
+    // ─── Background API queue (runTask) ─────────────────────────────────────────────
+    // runTask is for BACKGROUND/METADATA only: getTracks, getPlaylist, getArtist, getAlbum,
+    // search, getPlaybackState (when called for enrichment/status), getQueue, setRepeat/setShuffle
+    // when called directly, and radio setters (setArtistRadio etc.). Serializes one task at a time,
+    // honors 429/Retry-After, global cooldown _apiRateLimitedUntil. See docs/RUNTASK-ANALYSIS.md.
+    //
+    // CONTROL operations must NOT use runTask (they would block enrichment and can deadlock if
+    // they call back into runTask): getVolume, setVolume, skipTrack, prevTrack, pausePlayback,
+    // resumePlayback, queueTrack, play(uri). They use the raw API or _raw* helpers.
+    //
+    // RULE: No runTask callback may call another method that uses runTask (nested runTask deadlocks).
+    // Code that can run inside a runTask (e.g. _verifyPlaybackState, forceRepeatShuffle) must use
+    // _rawGetPlaybackState / _rawSetRepeat / _rawSetShuffle instead of getPlaybackState/setRepeat/setShuffle.
+
     async runTask(task, limit = 1, taskName = '') {
         const name = taskName || 'runTask';
         return new Promise((resolve, reject) => {
@@ -54,8 +67,8 @@ class Spotify {
 
     async _runTaskOnce(task, limit, taskName = '') {
         const now = Date.now();
-        if (now < this._rateLimitedUntil) {
-            const waitMs = this._rateLimitedUntil - now;
+        if (now < this._apiRateLimitedUntil) {
+            const waitMs = this._apiRateLimitedUntil - now;
             this.consoleInfo(`Rate limit cooldown: waiting ${Math.round(waitMs / 1000)}s before request.`);
             await this.sleep(waitMs);
         }
@@ -80,17 +93,17 @@ class Spotify {
                 const RETRY_AFTER_MAX_SEC = 300;
                 const RETRY_AFTER_NO_RETRY_SEC = 3600;
                 if (!Number.isNaN(seconds) && seconds >= RETRY_AFTER_NO_RETRY_SEC) {
-                    this._rateLimitedUntil = Math.max(this._rateLimitedUntil, Date.now() + Math.min(seconds, RETRY_AFTER_MAX_SEC) * 1000);
-                    this.consoleError(`Rate limited (429) [${taskName}]; Retry-After ${seconds}s — not retrying. Backing off until ${new Date(this._rateLimitedUntil).toISOString()}.`);
+                    this._apiRateLimitedUntil = Math.max(this._apiRateLimitedUntil, Date.now() + Math.min(seconds, RETRY_AFTER_MAX_SEC) * 1000);
+                    this.consoleError(`Rate limited (429) [${taskName}]; Retry-After ${seconds}s — not retrying. Backing off until ${new Date(this._apiRateLimitedUntil).toISOString()}.`);
                     throw e;
                 }
                 const sec = !Number.isNaN(seconds) && seconds >= 0
                     ? Math.min(RETRY_AFTER_MAX_SEC, Math.max(RETRY_AFTER_MIN_SEC, seconds))
                     : RETRY_AFTER_DEFAULT_SEC;
                 waitMs = sec * 1000;
-                this._rateLimitedUntil = Math.max(this._rateLimitedUntil, Date.now() + waitMs);
+                this._apiRateLimitedUntil = Math.max(this._apiRateLimitedUntil, Date.now() + waitMs);
                 if (seconds > RETRY_AFTER_MAX_SEC) {
-                    this.consoleInfo(`Rate limited (429) [${taskName}]; long cooldown (${seconds}s). Backing off until ${new Date(this._rateLimitedUntil).toISOString()}.`);
+                    this.consoleInfo(`Rate limited (429) [${taskName}]; long cooldown (${seconds}s). Backing off until ${new Date(this._apiRateLimitedUntil).toISOString()}.`);
                 }
                 this.consoleInfo(`Rate limited (429) [${taskName}]; waiting ${sec}s before retry (Retry-After: ${raw ?? 'none'}).`);
             }
@@ -98,6 +111,30 @@ class Spotify {
             const nextLimit = (e.statusCode === 429 && limit === 1) ? 1 : limit - 1;
             return this._runTaskOnce(task, nextLimit, taskName);
         });
+    }
+
+    /** Raw API call: no queue. Use from control path or from code that may run inside runTask (e.g. _verifyPlaybackState). */
+    async _rawGetPlaybackState() {
+        if (!this.isAuthTokenValid()) {
+            await this.refreshAuthToken();
+        }
+        return this.api.getMyCurrentPlaybackState();
+    }
+
+    /** Raw API call: no queue. Use from forceRepeatShuffle to avoid nested runTask. */
+    async _rawSetRepeat() {
+        if (!this.isAuthTokenValid()) {
+            await this.refreshAuthToken();
+        }
+        return this.api.setRepeat("context");
+    }
+
+    /** Raw API call: no queue. Use from forceRepeatShuffle to avoid nested runTask. */
+    async _rawSetShuffle() {
+        if (!this.isAuthTokenValid()) {
+            await this.refreshAuthToken();
+        }
+        return this.api.setShuffle(true);
     }
 
     getAuthorizeUrl() {
@@ -632,13 +669,9 @@ class Spotify {
         return await this.api.transferMyPlayback( { deviceIds: [deviceId], play: playNow });
     }
 
+    /** Current playback state. Uses runTask (background queue). For use inside runTask callbacks, use _rawGetPlaybackState(). */
     async getPlaybackState() {
-        if (!this.isAuthTokenValid()) {
-            await this.refreshAuthToken();
-        }
-        return await this.runTask(() => {
-            return this.api.getMyCurrentPlaybackState();
-        }, 1, 'getPlaybackState');
+        return await this.runTask(() => this._rawGetPlaybackState(), 1, 'getPlaybackState');
     }
 
     async getLyrics() {
@@ -657,18 +690,16 @@ class Spotify {
             .then(resp => JSON.parse(resp.text));
     }
 
+    /** Control path: no runTask. Uses raw API so volume is responsive and doesn't block enrichment. */
     async getVolume() {
-        if (!this.isAuthTokenValid()) {
-            await this.refreshAuthToken();
-        }
-        // Don't use runTask — getPlaybackState() uses runTask, so wrapping it would deadlock the queue.
-        const result = await this.api.getMyCurrentPlaybackState();
+        const result = await this._rawGetPlaybackState();
         if (result.body && result.body.device) {
             return result.body.device.volume_percent;
         }
         throw new Error("No playback device found.");
     }
 
+    /** Control path: no runTask. */
     async setVolume(volume) {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
@@ -676,13 +707,13 @@ class Spotify {
         if (volume.trim().match(/^1?\d{0,2}$/)) {
             const v = parseInt(volume, 10);
             if (typeof v == 'number' && v <= 100) {
-                // Don't use runTask so volume commands don't block enrichment/search or deadlock with getPlaybackState.
                 return await this.api.setVolume(v);
             }
         }
         throw new Error("Volume can only be set to a whole number between 0 and 100.");
     }
 
+    /** Control path: no runTask. */
     async queueTrack(trackURI) {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
@@ -690,7 +721,6 @@ class Spotify {
         if (this.isTrackQueued(trackURI)) {
             throw new Error("Track already queued.");
         }
-        // Don't use runTask so queue requests aren't stuck behind getPlaylist/getTracks
         await this._verifyPlaybackState();
         const result = await this.api.addToQueue(trackURI);
         this.consoleInfo("Queued track response:", result);
@@ -708,19 +738,19 @@ class Spotify {
         return false;
     }
 
+    /** Control path: no runTask. */
     async skipTrack() {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        // Don't use runTask so playback controls don't block enrichment/search.
         return await this.api.skipToNext();
     }
 
+    /** Control path: no runTask. */
     async prevTrack() {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        // Don't use runTask so playback controls don't block enrichment/search.
         return await this.api.skipToPrevious();
     }
 
@@ -757,30 +787,22 @@ class Spotify {
         return await this.api.play({device_id: await this.getPlaybackDeviceId()});
     }
 
+    /** Background queue. For use from forceRepeatShuffle (which may run inside runTask), use _rawSetRepeat(). */
     async setRepeat() {
-        if (!this.isAuthTokenValid()) {
-            await this.refreshAuthToken();
-        }
-        return await this.runTask(() => {
-            return this.api.setRepeat("context");
-        });
+        return await this.runTask(() => this._rawSetRepeat());
     }
 
+    /** Background queue. For use from forceRepeatShuffle, use _rawSetShuffle(). */
     async setShuffle() {
-        if (!this.isAuthTokenValid()) {
-            await this.refreshAuthToken();
-        }
-        return await this.runTask(() => {
-            return this.api.setShuffle(true);
-        });
+        return await this.runTask(() => this._rawSetShuffle());
     }
 
+    /** Control path: no runTask. Calls forceRepeatShuffle which uses raw API to avoid nested runTask. */
     async play(uri) {
         this.consoleInfo("play request: ", uri);
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        // Don't use runTask — forceRepeatShuffle() calls getPlaybackState() which uses runTask, so wrapping would deadlock and block enrichment after set playlist.
         let response;
         if (uri.indexOf(':station:') < 0 && uri.indexOf(':radio:') < 0) {
             response = await this.api.play({device_id: await this.getPlaybackDeviceId(), context_uri: uri});
@@ -1164,7 +1186,7 @@ class Spotify {
 
         // If we have artist_uri but no artist name yet, use cache or fetch artist in background and patch (skip when rate limited)
         const meta = playerState.track.metadata || {};
-        if (minimalNowPlaying.artist === '' && meta.artist_uri && Date.now() >= this._rateLimitedUntil) {
+        if (minimalNowPlaying.artist === '' && meta.artist_uri && Date.now() >= this._apiRateLimitedUntil) {
             const artistId = meta.artist_uri.substring(meta.artist_uri.lastIndexOf(':') + 1);
             const artistCached = this._artistCache.get(artistId);
             if (artistCached && artistCached.expires > Date.now()) {
@@ -1228,11 +1250,11 @@ class Spotify {
 
     /**
      * Checks we're still logged into Spotify and current playing something. Resumes playback if not.
+     * Called from queueTrack (control) and _setContextRadio (inside runTask). Uses _rawGetPlaybackState to avoid nested runTask.
      * @returns {Promise<void>}
      * @private
      */
     async _verifyPlaybackState() {
-
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
@@ -1240,8 +1262,7 @@ class Spotify {
             await this.refreshWebAuthToken();
         }
 
-        // now check if it's currently playing anything... start it if not
-        const playback = await this.getPlaybackState();
+        const playback = await this._rawGetPlaybackState();
         if (!playback.body || false === playback.body.is_playing) {
             // do we have anything to play
             if (!playback.body || (playback.body.context == null && playback.body.item == null)) {
@@ -1258,19 +1279,19 @@ class Spotify {
     }
 
     /**
-     * Sets shuffle and repeat mode on (if possible)
-     * @param playbackState (optional) the current playback state
+     * Sets shuffle and repeat mode on (if possible). Called from play(uri) and _verifyPlaybackState (which can run inside runTask).
+     * Uses raw API so we never nest runTask.
+     * @param playbackState (optional) the current playback state; if omitted, fetches via _rawGetPlaybackState
      * @returns {Promise<void>}
      */
     async forceRepeatShuffle(playbackState) {
-        const playback = playbackState != null ? playbackState : await this.getPlaybackState();
+        const playback = playbackState != null ? playbackState : await this._rawGetPlaybackState();
 
-        // force repeat/shuffle
         if (playback.body && !playback.body?.actions?.disallows?.toggling_repeat_context && playback.body.repeat_state == "off") {
-            await this.setRepeat();
+            await this._rawSetRepeat();
         }
         if (playback.body && !playback.body?.actions?.disallows?.toggling_shuffle && playback.body.shuffle_state == false) {
-            await this.setShuffle();
+            await this._rawSetShuffle();
         }
     }
 
