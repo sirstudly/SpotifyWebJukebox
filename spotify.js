@@ -780,19 +780,17 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return await this.runTask(async () => {
-            let response;
-            // official API does not support station/radio
-            if (uri.indexOf(':station:') < 0 && uri.indexOf(':radio:') < 0) {
-                response = await this.api.play({device_id: await this.getPlaybackDeviceId(), context_uri: uri});
-            }
-            else {
-                response = await this._play(uri, this.fakeDeviceId, await this.getPlaybackDeviceId());
-            }
-            this.consoleInfo("play response:", response);
-            await this.forceRepeatShuffle();
-            return response;
-        });
+        // Don't use runTask — forceRepeatShuffle() calls getPlaybackState() which uses runTask, so wrapping would deadlock and block enrichment after set playlist.
+        let response;
+        if (uri.indexOf(':station:') < 0 && uri.indexOf(':radio:') < 0) {
+            response = await this.api.play({device_id: await this.getPlaybackDeviceId(), context_uri: uri});
+        }
+        else {
+            response = await this._play(uri, this.fakeDeviceId, await this.getPlaybackDeviceId());
+        }
+        this.consoleInfo("play response:", response);
+        await this.forceRepeatShuffle();
+        return response;
     }
 
     /**
