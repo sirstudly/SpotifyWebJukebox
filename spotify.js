@@ -658,13 +658,15 @@ class Spotify {
     }
 
     async getVolume() {
-        const playbackState = await this.runTask(() => {
-            return this.getPlaybackState();
-        });
-        if (playbackState.body.device) {
-            return playbackState.body.device.volume_percent;
+        if (!this.isAuthTokenValid()) {
+            await this.refreshAuthToken();
         }
-        throw Error("No playback device found.");
+        // Don't use runTask — getPlaybackState() uses runTask, so wrapping it would deadlock the queue.
+        const result = await this.api.getMyCurrentPlaybackState();
+        if (result.body && result.body.device) {
+            return result.body.device.volume_percent;
+        }
+        throw new Error("No playback device found.");
     }
 
     async setVolume(volume) {
@@ -674,9 +676,8 @@ class Spotify {
         if (volume.trim().match(/^1?\d{0,2}$/)) {
             const v = parseInt(volume, 10);
             if (typeof v == 'number' && v <= 100) {
-                return await this.runTask(() => {
-                    return this.api.setVolume(v);
-                });
+                // Don't use runTask so volume commands don't block enrichment/search or deadlock with getPlaybackState.
+                return await this.api.setVolume(v);
             }
         }
         throw new Error("Volume can only be set to a whole number between 0 and 100.");
@@ -711,18 +712,16 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return await this.runTask(() => {
-            return this.api.skipToNext();
-        });
+        // Don't use runTask so playback controls don't block enrichment/search.
+        return await this.api.skipToNext();
     }
 
     async prevTrack() {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return await this.runTask(() => {
-            return this.api.skipToPrevious();
-        });
+        // Don't use runTask so playback controls don't block enrichment/search.
+        return await this.api.skipToPrevious();
     }
 
     async getQueue() {
@@ -746,18 +745,16 @@ class Spotify {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return await this.runTask(() => {
-            return this.api.pause();
-        });
+        // Don't use runTask so playback controls don't block enrichment/search.
+        return await this.api.pause();
     }
 
     async resumePlayback() {
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return await this.runTask(async() => {
-            return this.api.play({device_id: await this.getPlaybackDeviceId()});
-        });
+        // Don't use runTask so playback controls don't block enrichment/search.
+        return await this.api.play({device_id: await this.getPlaybackDeviceId()});
     }
 
     async setRepeat() {
