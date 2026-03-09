@@ -21,15 +21,23 @@ dotenv.config();
 
 class Spotify {
 
-    // Short TTL cache for track bodies to cut API calls on song rollover (next -> current often already fetched).
+    // Track cache (getTracks bodies) — metadata is effectively immutable like artist/album.
     _trackCache = new Map();
-    _trackCacheTTLMs = 60000;
+    _trackCacheTTLMs = 86400000; // 24 h
     _rateLimitedUntil = 0;
     _runTaskQueue = Promise.resolve();
 
     // Playlist context cache (name/description) to avoid repeated getPlaylist on same playlist across song changes.
     _playlistContextCache = new Map();
-    _playlistContextCacheTTLMs = 300000; // 5 min
+    _playlistContextCacheTTLMs = 3600000; // 1 h
+
+    // Artist cache (getArtist bodies) to avoid 429s when many tracks lack artist in WS metadata.
+    _artistCache = new Map();
+    _artistCacheTTLMs = 86400000; // 24 h — artist names effectively immutable
+
+    // Album cache (getAlbum bodies) to cut API calls for album context / metadata.
+    _albumCache = new Map();
+    _albumCacheTTLMs = 86400000; // 24 h — album metadata effectively immutable
 
     // (re)attempt a task, a given number of times. On 429, honors Retry-After header.
     // Serialized so only one task runs at a time; avoids burst retries that trigger 86400 (24h) limits.
@@ -553,23 +561,35 @@ class Spotify {
     }
 
     async getAlbum(albumId) {
+        const cached = this._albumCache.get(albumId);
+        if (cached && cached.expires > Date.now()) {
+            return cached.body;
+        }
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return this.runTask(async () => {
+        const body = await this.runTask(async () => {
             const result = await this.api.getAlbum(albumId);
             return result.body;
         });
+        this._albumCache.set(albumId, { body, expires: Date.now() + this._albumCacheTTLMs });
+        return body;
     }
 
     async getArtist(artistId) {
+        const cached = this._artistCache.get(artistId);
+        if (cached && cached.expires > Date.now()) {
+            return cached.body;
+        }
         if (!this.isAuthTokenValid()) {
             await this.refreshAuthToken();
         }
-        return this.runTask(async () => {
+        const body = await this.runTask(async () => {
             const result = await this.api.getArtist(artistId);
             return result.body;
         }, 1, 'getArtist');
+        this._artistCache.set(artistId, { body, expires: Date.now() + this._artistCacheTTLMs });
+        return body;
     }
 
     async getArtistAlbums(artistId, skip = 0, limit = 10) {
@@ -1147,20 +1167,30 @@ class Spotify {
         };
         this.consoleInfo("Now Playing:", this.nowPlaying);
 
-        // If we have artist_uri but no artist name yet, fetch artist in background and patch (skip when rate limited)
+        // If we have artist_uri but no artist name yet, use cache or fetch artist in background and patch (skip when rate limited)
         const meta = playerState.track.metadata || {};
         if (minimalNowPlaying.artist === '' && meta.artist_uri && Date.now() >= this._rateLimitedUntil) {
             const artistId = meta.artist_uri.substring(meta.artist_uri.lastIndexOf(':') + 1);
-            this.getArtist(artistId)
-                .then((artistBody) => {
-                    if (this._updateNowPlayingGeneration === gen && this.nowPlaying?.now_playing) {
-                        this.nowPlaying = {
-                            ...this.nowPlaying,
-                            now_playing: { ...this.nowPlaying.now_playing, artist: artistBody.name }
-                        };
-                    }
-                })
-                .catch(() => {});
+            const artistCached = this._artistCache.get(artistId);
+            if (artistCached && artistCached.expires > Date.now()) {
+                if (this._updateNowPlayingGeneration === gen && this.nowPlaying?.now_playing) {
+                    this.nowPlaying = {
+                        ...this.nowPlaying,
+                        now_playing: { ...this.nowPlaying.now_playing, artist: artistCached.body.name }
+                    };
+                }
+            } else {
+                this.getArtist(artistId)
+                    .then((artistBody) => {
+                        if (this._updateNowPlayingGeneration === gen && this.nowPlaying?.now_playing) {
+                            this.nowPlaying = {
+                                ...this.nowPlaying,
+                                now_playing: { ...this.nowPlaying.now_playing, artist: artistBody.name }
+                            };
+                        }
+                    })
+                    .catch(() => {});
+            }
         }
 
         const nextIds = playerState.next_tracks
