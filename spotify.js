@@ -1098,6 +1098,9 @@ class Spotify {
                 return;
             }
             const item = playback.body.item;
+            const oldNowPlaying = this.nowPlaying?.now_playing;
+            const trackChanged = oldNowPlaying?.id && item?.id && oldNowPlaying.id !== item.id;
+            const previous_track = trackChanged ? oldNowPlaying : (this.nowPlaying?.previous_track ?? null);
             this.nowPlaying = {
                 last_updated: Date.now(),
                 timestamp: playback.body.timestamp || Date.now(),
@@ -1111,6 +1114,7 @@ class Spotify {
                     artist: (item.artists || []).map(a => a.name).join(', '),
                     album: item.album ? { id: item.album.id, images: item.album.images || [], name: item.album.name } : {}
                 },
+                previous_track,
                 next_track: null,
                 queued_tracks: [],
                 playlist_tracks: [],
@@ -1169,6 +1173,10 @@ class Spotify {
         this._updateNowPlayingGeneration = (this._updateNowPlayingGeneration || 0) + 1;
         const gen = this._updateNowPlayingGeneration;
 
+        const oldNowPlaying = this.nowPlaying?.now_playing;
+        const trackChanged = oldNowPlaying?.id && minimalNowPlaying?.id && oldNowPlaying.id !== minimalNowPlaying.id;
+        const previous_track = trackChanged ? oldNowPlaying : (this.nowPlaying?.previous_track ?? null);
+
         this.nowPlaying = {
             last_updated: Date.now(),
             timestamp: parseInt(playerState.timestamp),
@@ -1176,6 +1184,7 @@ class Spotify {
             progress_ms: parseInt(playerState.position_as_of_timestamp),
             duration_ms: parseInt(playerState.duration),
             now_playing: minimalNowPlaying,
+            previous_track,
             next_track: null,
             queued_tracks: [],
             playlist_tracks: [],
@@ -1236,6 +1245,7 @@ class Spotify {
                 progress_ms: parseInt(playerState.position_as_of_timestamp),
                 duration_ms: parseInt(playerState.duration),
                 now_playing: nextTracks[0] || minimalNowPlaying,
+                previous_track: this.nowPlaying?.previous_track ?? null,
                 next_track: nextTracks[1] || null,
                 queued_tracks: nextTracks.slice(1).filter(t => t.is_queued),
                 playlist_tracks: nextTracks.slice(1).filter(t => !t.is_queued).slice(0, 20),
