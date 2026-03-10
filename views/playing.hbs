@@ -702,13 +702,18 @@
                     </ol>
                 </div>
 
-                <div x-show="$store.player.playbackObj?.playlist_tracks?.length">
+                <div class="mb-3" x-show="$store.player.playbackObj?.playlist_tracks?.length">
                     <div class="underline decoration-2 underline-offset-4 mb-2 text-lg" x-text="$store.player.playbackObj?.context_title"></div>
                     <ol class="list-decimal mx-5">
                         <template x-for="track in $store.player.playbackObj?.playlist_tracks">
                             <li x-text="track.song_title + ` by ` + track.artist"></li>
                         </template>
                     </ol>
+                </div>
+
+                <div x-show="$store.player.playbackObj?.previous_track">
+                    <div class="underline decoration-2 underline-offset-4 mb-2 text-lg">Previous Track</div>
+                    <p class="text-base" x-text="$store.player.playbackObj?.previous_track ? ($store.player.playbackObj.previous_track.song_title + ' by ' + $store.player.playbackObj.previous_track.artist) : ''"></p>
                 </div>
             </div>
 
